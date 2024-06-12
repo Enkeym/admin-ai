@@ -39,7 +39,7 @@ bot.command('watchAi', async (ctx) => {
 })
 
 bot.command('sum', async (ctx) => {
-  if (currentProcess) currentProcess() // Остановить текущий процесс
+  if (currentProcess) currentProcess() // Stop the current process
   const args = ctx.message.text.split(' ')
   const channelId = args[1]
   const countArg = parseInt(args[2], 10)
@@ -50,26 +50,34 @@ bot.command('sum', async (ctx) => {
 
   if (!channelId) return ctx.reply('Вы не указали ID канала')
 
-  const messages = await getUnreadMessages(channelId, count)
+  try {
+    let messages = await getUnreadMessages(channelId, count)
 
-  if (messages.length > 0) {
-    const reversedMessages = messages.reverse()
+    if (Array.isArray(messages) && messages.length > 0) {
+      messages = messages.reverse()
 
-    for (let i = 0; i < reversedMessages.length; i++) {
-      setTimeout(async () => {
-        const message = reversedMessages[i]
+      for (let i = 0; i < messages.length; i++) {
+        setTimeout(async () => {
+          const message = messages[i]
 
-        if (message.media && !message.fwdFrom) {
-          await downloadAndSendMedia(myGroup, message)
-        } else if (!message.media && !message.fwdFrom) {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-          await bot.telegram.sendMessage(myGroup, message.message)
-        } else {
-          console.log('Сообщение переслано или не содержит медиа, пропуск...')
-        }
-      }, i * interval * 1000)
+          if (message.media && !message.fwdFrom) {
+            await downloadAndSendMedia(myGroup, message)
+          } else if (!message.media && !message.fwdFrom) {
+            console.log('Медиа не найдено, отправка текстового сообщения')
+            await bot.telegram.sendMessage(myGroup, message.message)
+          } else {
+            console.log('Сообщение переслано или не содержит медиа, пропуск...')
+          }
+        }, i * interval * 1000)
+      }
+    } else {
+      ctx.reply('Непрочитанных сообщений не найдено')
     }
-  } else {
-    ctx.reply('Непрочитанных сообщений не найдено')
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.error('File not found:', error.path)
+    } else {
+      console.error('An error occurred:', error)
+    }
   }
 })
