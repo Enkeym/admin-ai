@@ -11,7 +11,6 @@ dotenv.config()
 
 const stringSession = new StringSession(process.env.TG_SESSIONS || '')
 
-// Получаем __filename и __dirname для модуля ES6
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -20,7 +19,6 @@ const rl = readline.createInterface({
   output: process.stdout
 })
 
-// Проверка значений API ID и API Hash
 if (!apiId || !apiHash) {
   throw new Error(
     'API ID и Hash не могут быть пустыми или неопределёнными. Проверьте файл config.js.'
@@ -54,7 +52,6 @@ if (!apiId || !apiHash) {
   const sessionString = client.session.save()
   console.log(sessionString)
 
-  // Оборачиваем sessionString в кавычки и записываем в файл .env без изменения содержимого
   const envPath = path.join(__dirname, '.env')
   fs.writeFileSync(envPath, `TG_SESSIONS='${sessionString}'\n`, { flag: 'a' })
 

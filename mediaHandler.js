@@ -7,7 +7,7 @@ import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
 import { giga } from './giga.js'
 
-// Получаем __filename и __dirname для модуля ES6
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 

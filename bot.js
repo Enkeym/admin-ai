@@ -11,8 +11,8 @@ export const bot = new Telegraf(tgToken)
 let currentProcess = null
 
 bot.command('watch', async (ctx) => {
-  if (currentProcess) currentProcess() // Остановить текущий процесс
-  const args = ctx.message.text.split(' ').slice(1, 4) // Только три канала
+  if (currentProcess) currentProcess() 
+  const args = ctx.message.text.split(' ').slice(1, 4) 
   if (args.length > 0) {
     currentProcess = await watchNewMessages(args)
     ctx.reply(`Наблюдение за новыми сообщениями из каналов: ${args.join(', ')}`)
@@ -22,10 +22,10 @@ bot.command('watch', async (ctx) => {
 })
 
 bot.command('watchAi', async (ctx) => {
-  if (currentProcess) currentProcess() // Остановить текущий процесс
-  const args = ctx.message.text.split(' ').slice(1, 4) // Только три канала
+  if (currentProcess) currentProcess() 
+  const args = ctx.message.text.split(' ').slice(1, 4) 
   const aiRequest =
-    'Убери рекламу, перепиши текст ярче, добавь тематические стикеры и сделай его более уникальным' // aiRequest прописан в боте
+    'Убери рекламу, перепиши текст ярче, добавь тематические стикеры и сделай его более уникальным'
   if (args.length > 0) {
     currentProcess = await watchNewMessagesAi(args, aiRequest)
     ctx.reply(
@@ -39,7 +39,7 @@ bot.command('watchAi', async (ctx) => {
 })
 
 bot.command('sum', async (ctx) => {
-  if (currentProcess) currentProcess() // Stop the current process
+  if (currentProcess) currentProcess() 
   const args = ctx.message.text.split(' ')
   const channelId = args[1]
   const countArg = parseInt(args[2], 10)
