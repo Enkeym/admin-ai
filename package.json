@@ -1,0 +1,25 @@
+{
+  "name": "gpt-tg-analytics",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "author": "Nikita Korolev",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "qs": "^6.12.1",
+    "telegraf": "^4.16.3",
+    "telegram": "^2.21.2",
+    "telegram-session": "^0.0.3",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.2"
+  }
+}
