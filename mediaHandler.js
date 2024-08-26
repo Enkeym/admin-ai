@@ -7,7 +7,6 @@ import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
 import { giga } from './giga.js'
 
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -100,10 +99,13 @@ export async function watchNewMessages(channelIds) {
       }
     }
 
-    client.addEventHandler(handler, new NewMessage({ chats: [channelId] }))
+    client.addEventHandler(
+      handler,
+      new NewMessage({ chats: [parseInt(channelId) || channelId] })
+    )
     currentHandlers.push({
       handler,
-      event: new NewMessage({ chats: [channelId] })
+      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
     })
   }
 
@@ -136,10 +138,13 @@ export async function watchNewMessagesAi(channelIds, aiRequest) {
       }
     }
 
-    client.addEventHandler(handler, new NewMessage({ chats: [channelId] }))
+    client.addEventHandler(
+      handler,
+      new NewMessage({ chats: [parseInt(channelId) || channelId] })
+    )
     currentHandlers.push({
       handler,
-      event: new NewMessage({ chats: [channelId] })
+      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
     })
   }
 
@@ -155,12 +160,15 @@ export async function getUnreadMessages(channelId, limit = 1) {
   if (!client.connected) await client.connect()
 
   const dialogs = await client.getDialogs({})
-  const channel = dialogs.find((d) => d.entity.username === channelId)
+  const channel = dialogs.find(
+    (d) =>
+      d.entity.id === parseInt(channelId) || d.entity.username === channelId
+  )
 
   if (channel) {
     return await client.getMessages(channel.entity, { limit })
   } else {
-    console.log('Канал не найден')
-    return 'Канал не найден'
+    console.log('Канал или группа не найдены')
+    return 'Канал или группа не найдены'
   }
 }

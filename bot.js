@@ -11,35 +11,37 @@ export const bot = new Telegraf(tgToken)
 let currentProcess = null
 
 bot.command('watch', async (ctx) => {
-  if (currentProcess) currentProcess() 
-  const args = ctx.message.text.split(' ').slice(1, 4) 
+  if (currentProcess) currentProcess()
+  const args = ctx.message.text.split(' ').slice(1)
   if (args.length > 0) {
     currentProcess = await watchNewMessages(args)
-    ctx.reply(`Наблюдение за новыми сообщениями из каналов: ${args.join(', ')}`)
+    ctx.reply(
+      `Наблюдение за новыми сообщениями из каналов/групп: ${args.join(', ')}`
+    )
   } else {
-    ctx.reply('Вы не указали ID каналов')
+    ctx.reply('Вы не указали ID каналов/групп')
   }
 })
 
 bot.command('watchAi', async (ctx) => {
-  if (currentProcess) currentProcess() 
-  const args = ctx.message.text.split(' ').slice(1, 4) 
+  if (currentProcess) currentProcess()
+  const args = ctx.message.text.split(' ').slice(1)
   const aiRequest =
     'Убери рекламу, перепиши текст ярче, добавь тематические стикеры и сделай его более уникальным'
   if (args.length > 0) {
     currentProcess = await watchNewMessagesAi(args, aiRequest)
     ctx.reply(
-      `Наблюдение с обработкой AI за новыми сообщениями из каналов: ${args.join(
+      `Наблюдение с обработкой AI за новыми сообщениями из каналов/групп: ${args.join(
         ', '
       )}`
     )
   } else {
-    ctx.reply('Вы не указали ID каналов')
+    ctx.reply('Вы не указали ID каналов/групп')
   }
 })
 
 bot.command('sum', async (ctx) => {
-  if (currentProcess) currentProcess() 
+  if (currentProcess) currentProcess()
   const args = ctx.message.text.split(' ')
   const channelId = args[1]
   const countArg = parseInt(args[2], 10)
