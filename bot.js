@@ -11,8 +11,8 @@ export const bot = new Telegraf(tgToken)
 let currentProcess = null
 
 bot.command('watch', async (ctx) => {
-  if (currentProcess) currentProcess() 
-  const args = ctx.message.text.split(' ').slice(1, 4) 
+  if (currentProcess) currentProcess()
+  const args = ctx.message.text.split(' ').slice(1, 4)
   if (args.length > 0) {
     currentProcess = await watchNewMessages(args)
     ctx.reply(
@@ -24,8 +24,10 @@ bot.command('watch', async (ctx) => {
 })
 
 bot.command('watchAi', async (ctx) => {
-  if (currentProcess) currentProcess() 
-  const args = ctx.message.text.split(' ').slice(1, 4) 
+  if (currentProcess) currentProcess()
+  const args = ctx.message.text.split(' ').slice(1, 4)
+
+  //Запрос для ИИ
   const aiRequest =
     'Убери рекламу, перепиши текст ярче, добавь тематические стикеры и сделай его более уникальным'
 
