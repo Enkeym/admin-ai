@@ -1,9 +1,10 @@
-import { gigaAuth, gigaScope } from './config.js'
-import { v4 as uuidv4 } from 'uuid'
 import axios from 'axios'
 import qs from 'qs'
 import https from 'https'
-//checking ai
+import { v4 as uuidv4 } from 'uuid'
+import { gigaAuth, gigaScope } from './config.js'
+
+// Функция для получения токена доступа
 async function getToken() {
   const config = {
     method: 'post',
@@ -24,7 +25,6 @@ async function getToken() {
   try {
     const response = await axios(config)
     const { access_token: accessToken, expires_at: expiresAt } = response.data
-
     return { accessToken, expiresAt }
   } catch (error) {
     console.error('Ошибка при получении токена:', error)
@@ -32,12 +32,12 @@ async function getToken() {
   }
 }
 
+// Функция для взаимодействия с GigaChat API
 async function giga(content = '', system = '') {
   try {
     const token = await getToken()
 
     const messages = []
-
     if (system) {
       messages.push({ role: 'system', content: system })
     }
@@ -81,4 +81,42 @@ async function giga(content = '', system = '') {
   }
 }
 
-export { giga }
+// Функция для проверки наличия рекламы в тексте
+async function checkForAds(text) {
+  const prompt = `Пожалуйста, проанализируйте следующее сообщение и определите, содержит ли оно рекламу. Если реклама обнаружена, ответьте "Да", иначе "Нет":\n\n"${text}"`
+
+  try {
+    const response = await giga(
+      prompt,
+      'Определение рекламы в тексте сообщения'
+    )
+    return response.includes('Да')
+  } catch (error) {
+    console.error('Ошибка при проверке рекламы:', error)
+    throw error
+  }
+}
+
+// Функция для обработки политического контента
+async function processPoliticalContent(text) {
+  const prompt = `
+    Вы - высококвалифицированный редактор. У вас есть задача - переработать текст, связанный с политикой. 
+    1. Уберите всю рекламу.
+    2. Перепишите текст, чтобы он звучал более индивидуально и ярко.
+    3. Убедитесь, что текст остается информативным и нейтральным.
+    
+    Вот исходный текст:
+    "${text}"
+    
+    Пожалуйста, предоставьте переработанный текст.`
+
+  try {
+    const response = await giga(prompt, 'Обработка политических сообщений')
+    return response
+  } catch (error) {
+    console.error('Ошибка при обработке политических сообщений:', error)
+    throw error
+  }
+}
+
+export { giga, checkForAds, processPoliticalContent }

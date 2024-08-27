@@ -5,7 +5,7 @@ import { client } from './telegramClient.js'
 import { fileURLToPath } from 'url'
 import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
-import { giga } from './giga.js'
+import { checkForAds, processPoliticalContent } from './giga.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -126,15 +126,23 @@ export async function watchNewMessagesAi(channelIds, aiRequest) {
     const handler = async (event) => {
       const message = event.message
 
-      if (message.media && !message.fwdFrom) {
-        message.message = await giga(message.message, aiRequest)
+      if (message.fwdFrom) {
+        console.log('Сообщение переслано, пропуск...')
+        return
+      }
+
+      if (await checkForAds(message.message)) {
+        console.log('Сообщение содержит рекламу, пропуск...')
+        return
+      }
+
+      if (message.media) {
+        message.message = await processPoliticalContent(message.message)
         await downloadAndSendMedia(myGroup, message)
-      } else if (!message.media && !message.fwdFrom) {
-        console.log('Медиа не найдено, отправка текстового сообщения')
-        message.message = await giga(message.message, aiRequest)
-        await bot.telegram.sendMessage(myGroup, message.message)
       } else {
-        console.log('Сообщение переслано или не содержит медиа, пропуск...')
+        console.log('Медиа не найдено, отправка текстового сообщения')
+        message.message = await processPoliticalContent(message.message)
+        await bot.telegram.sendMessage(myGroup, message.message)
       }
     }
 
