@@ -12,7 +12,7 @@ let currentProcess = null
 
 bot.command('watch', async (ctx) => {
   if (currentProcess) currentProcess()
-  const args = ctx.message.text.split(' ').slice(1, 4)
+  const args = ctx.message.text.split(' ').slice(1)
   if (args.length > 0) {
     currentProcess = await watchNewMessages(args)
     ctx.reply(
@@ -25,7 +25,7 @@ bot.command('watch', async (ctx) => {
 
 bot.command('watchAi', async (ctx) => {
   if (currentProcess) currentProcess()
-  const args = ctx.message.text.split(' ').slice(1, 4)
+  const args = ctx.message.text.split(' ').slice(1)
 
   //Запрос для ИИ
   const aiRequest =

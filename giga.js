@@ -37,6 +37,7 @@ async function giga(content = '', system = '') {
     const token = await getToken()
 
     const messages = []
+    
     if (system) {
       messages.push({ role: 'system', content: system })
     }
