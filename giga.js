@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import axios from 'axios'
 import qs from 'qs'
 import https from 'https'
-
+//checking ai
 async function getToken() {
   const config = {
     method: 'post',
@@ -18,7 +18,7 @@ async function getToken() {
     data: qs.stringify({
       scope: gigaScope
     }),
-    httpsAgent: new https.Agent({ rejectUnauthorized: false }) 
+    httpsAgent: new https.Agent({ rejectUnauthorized: false })
   }
 
   try {
@@ -28,7 +28,7 @@ async function getToken() {
     return { accessToken, expiresAt }
   } catch (error) {
     console.error('Ошибка при получении токена:', error)
-    throw error 
+    throw error
   }
 }
 
@@ -37,7 +37,7 @@ async function giga(content = '', system = '') {
     const token = await getToken()
 
     const messages = []
-    
+
     if (system) {
       messages.push({ role: 'system', content: system })
     }
