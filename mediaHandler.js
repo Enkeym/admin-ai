@@ -90,13 +90,11 @@ export async function watchNewMessages(channelIds) {
   for (const channelId of channelIds) {
     const handler = async (event) => {
       const message = event.message
-      if (message.media && !message.fwdFrom) {
+      if (message.media) {
         await downloadAndSendMedia(myGroup, message)
-      } else if (!message.media && !message.fwdFrom) {
+      } else {
         console.log('Медиа не найдено, отправка текстового сообщения')
         await bot.telegram.sendMessage(myGroup, message.message)
-      } else {
-        console.log('Сообщение переслано или не содержит медиа, пропуск...')
       }
     }
 
