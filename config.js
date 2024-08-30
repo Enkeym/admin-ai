@@ -10,6 +10,10 @@ const gigaClientSecret = process.env.CLIENT_SECRET
 const gigaAuth = process.env.GIGA_AUTH
 const gigaScope = 'GIGACHAT_API_PERS'
 
+const YandexAuthToken = process.env.ALICE_AUTH
+const yandexIamToken = process.env.ALICE_IAM
+const yandexFolderId = process.env.FOLDER_ID
+
 export {
   apiId,
   apiHash,
@@ -18,5 +22,8 @@ export {
   myGroup,
   gigaClientSecret,
   gigaAuth,
-  gigaScope
+  gigaScope,
+  YandexAuthToken,
+  yandexIamToken,
+  yandexFolderId
 }

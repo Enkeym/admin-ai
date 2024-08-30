@@ -4,7 +4,8 @@ import {
   downloadAndSendMedia,
   getUnreadMessages,
   watchNewMessages,
-  watchNewMessagesAi
+  watchNewMessagesAi,
+  watchNewMessagesNoAds
 } from './mediaHandler.js'
 
 export const bot = new Telegraf(tgToken)
@@ -23,16 +24,27 @@ bot.command('watch', async (ctx) => {
   }
 })
 
+bot.command('watchNoAds', async (ctx) => {
+  if (currentProcess) currentProcess()
+  const args = ctx.message.text.split(' ').slice(1)
+  if (args.length > 0) {
+    currentProcess = await watchNewMessagesNoAds(args)
+    ctx.reply(
+      `Наблюдение за новыми сообщениями без рекламы из каналов/групп: ${args.join(
+        ', '
+      )}`
+    )
+  } else {
+    ctx.reply('Вы не указали ID каналов/групп')
+  }
+})
+
 bot.command('watchAi', async (ctx) => {
   if (currentProcess) currentProcess()
   const args = ctx.message.text.split(' ').slice(1)
 
-  // Запрос для ИИ
-  const aiRequest =
-    'Убери рекламу, перепиши текст ярче, добавь тематические стикеры и сделай его более уникальным'
-
   if (args.length > 0) {
-    currentProcess = await watchNewMessagesAi(args, aiRequest)
+    currentProcess = await watchNewMessagesAi(args)
     ctx.reply(
       `Наблюдение с обработкой AI за новыми сообщениями из каналов/групп: ${args.join(
         ', '
@@ -65,13 +77,11 @@ bot.command('sum', async (ctx) => {
         setTimeout(async () => {
           const message = messages[i]
 
-          if (message.media && !message.fwdFrom) {
+          if (message.media) {
             await downloadAndSendMedia(myGroup, message)
-          } else if (!message.media && !message.fwdFrom) {
+          } else {
             console.log('Медиа не найдено, отправка текстового сообщения')
             await bot.telegram.sendMessage(myGroup, message.message)
-          } else {
-            console.log('Сообщение переслано или не содержит медиа, пропуск...')
           }
         }, i * interval * 1000)
       }
@@ -86,3 +96,5 @@ bot.command('sum', async (ctx) => {
     }
   }
 })
+
+export default bot
