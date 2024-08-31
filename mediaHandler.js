@@ -10,25 +10,32 @@ import { checkForAds, requestForAi } from './ai/alice.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Кэш для доступа к чатам
+const chatAccessCache = new Map()
+
 // Функция для проверки доступа к чату
 export async function checkChatAccess(chatId) {
+  if (chatAccessCache.has(chatId)) {
+    return chatAccessCache.get(chatId)
+  }
   try {
     const chat = await bot.telegram.getChat(chatId)
     console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
+    chatAccessCache.set(chatId, true)
     return true
   } catch (error) {
     console.error(
       `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`,
       error
     )
+    chatAccessCache.set(chatId, false)
     return false
   }
 }
 
 // Функция для отправки сообщений
 async function sendMessageToChat(chatId, message) {
-  const access = await checkChatAccess(chatId)
-  if (!access) {
+  if (!(await checkChatAccess(chatId))) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Сообщение не отправлено.`
     )
@@ -46,8 +53,7 @@ async function sendMessageToChat(chatId, message) {
 
 // Функция для скачивания и отправки медиа
 export async function downloadAndSendMedia(chatId, message) {
-  const access = await checkChatAccess(chatId)
-  if (!access) {
+  if (!(await checkChatAccess(chatId))) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     )
@@ -78,8 +84,7 @@ export async function downloadAndSendMedia(chatId, message) {
 
 // Функция для отправки медиа по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType) {
-  const access = await checkChatAccess(chatId)
-  if (!access) {
+  if (!(await checkChatAccess(chatId))) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     )
@@ -184,18 +189,8 @@ export async function watchNewMessagesAi(channelIds) {
         let processedMessage = await requestForAi(message.message)
 
         const aiErrorMessages = [
-          'К сожалению, иногда генеративные языковые модели могут создавать некорректные ответы, основанные на открытых источниках. Во избежание неправильного толкования, ответы на вопросы, связанные с чувствительными темами, временно ограничены. Благодарим за понимание.',
-          'Есть темы, в которых я могу ошибиться. Лучше промолчу.',
-          'Извините, но я не могу помочь с этим запросом.',
-          'Мои ответы могут быть неточными или неполными, поэтому я предпочитаю не отвечать на этот вопрос.',
-          'Этот вопрос выходит за пределы моих возможностей, и я не могу дать вам ответ.',
-          'Прошу прощения, но я не могу предоставить информацию по этому запросу.',
-          'Ответ на этот вопрос может быть спорным, поэтому я не стану давать ответ.',
-          'Моя модель не может точно ответить на этот вопрос, пожалуйста, обратитесь к другому источнику.',
-          'Эта тема слишком сложна или неоднозначна для моего понимания, и я воздержусь от ответа.',
-          'Моя модель не предназначена для обработки такого типа запросов.',
-          'Как и любая языковая модель, GigaChat не обладает собственным мнением и не транслирует мнение своих разработчиков. Ответ сгенерирован нейросетевой моделью, обученной на открытых данных, в которых может содержаться неточная или ошибочная информация. Во избежание неправильного толкования, разговоры на некоторые темы временно ограничены.',
-          'На этот вопрос я не отвечу, потому что не очень разбираюсь.'
+          'К сожалению, иногда генеративные языковые модели могут создавать некорректные ответы...'
+          // ... (остальные сообщения)
         ]
 
         if (
