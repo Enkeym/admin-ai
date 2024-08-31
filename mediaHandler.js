@@ -5,7 +5,7 @@ import { client } from './telegramClient.js'
 import { fileURLToPath } from 'url'
 import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
-import { checkForAds, requestForAi } from './ai/alice.js'
+import { checkForAds, requestForAi } from './ai/giga.js'
 import { aiErrorMessages } from './utils/aiErrorMessages.js'
 
 const __filename = fileURLToPath(import.meta.url)
