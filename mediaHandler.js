@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url'
 import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
 import { checkForAds, requestForAi } from './ai/alice.js'
-import {aiErrorMessages} from './utils/aiErrorMessages.js'
+import { aiErrorMessages } from './utils/aiErrorMessages.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -54,6 +54,11 @@ async function sendMessageToChat(chatId, message) {
 
 // Функция для скачивания и отправки медиа
 export async function downloadAndSendMedia(chatId, message) {
+  if (!message.message || !message.message.trim()) {
+    console.log('Сообщение не содержит текста, медиа не будет отправлено.')
+    return
+  }
+
   if (!(await checkChatAccess(chatId))) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
