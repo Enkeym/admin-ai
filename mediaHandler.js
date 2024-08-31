@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
 import { checkForAds, requestForAi } from './ai/alice.js'
+import {aiErrorMessages} from './utils/aiErrorMessages.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -187,11 +188,6 @@ export async function watchNewMessagesAi(channelIds) {
 
         // Обработка текста AI
         let processedMessage = await requestForAi(message.message)
-
-        const aiErrorMessages = [
-          'К сожалению, иногда генеративные языковые модели могут создавать некорректные ответы...'
-          // ... (остальные сообщения)
-        ]
 
         if (
           aiErrorMessages.some((errorMsg) =>
