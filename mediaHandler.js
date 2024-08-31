@@ -10,26 +10,25 @@ import { checkForAds, requestForAi } from './ai/alice.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-let chatAccess = false
-
 // Функция для проверки доступа к чату
 export async function checkChatAccess(chatId) {
   try {
     const chat = await bot.telegram.getChat(chatId)
     console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
-    chatAccess = true
+    return true
   } catch (error) {
     console.error(
       `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`,
       error
     )
-    chatAccess = false
+    return false
   }
 }
 
 // Функция для отправки сообщений
 async function sendMessageToChat(chatId, message) {
-  if (!chatAccess) {
+  const access = await checkChatAccess(chatId)
+  if (!access) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Сообщение не отправлено.`
     )
@@ -42,20 +41,13 @@ async function sendMessageToChat(chatId, message) {
     console.log('Сообщение успешно отправлено в чат.')
   } catch (error) {
     console.error('Ошибка при отправке сообщения:', error)
-    if (error.response && error.response.error_code === 400) {
-      console.error(
-        `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`
-      )
-      chatAccess = false // Обновляем статус доступа
-    } else {
-      console.error('Произошла ошибка при отправке сообщения:', error)
-    }
   }
 }
 
 // Функция для скачивания и отправки медиа
 export async function downloadAndSendMedia(chatId, message) {
-  if (!chatAccess) {
+  const access = await checkChatAccess(chatId)
+  if (!access) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     )
@@ -86,7 +78,8 @@ export async function downloadAndSendMedia(chatId, message) {
 
 // Функция для отправки медиа по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType) {
-  if (!chatAccess) {
+  const access = await checkChatAccess(chatId)
+  if (!access) {
     console.error(
       `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     )
@@ -128,14 +121,6 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType) {
     console.log('Медиа успешно отправлено.')
   } catch (error) {
     console.error('Ошибка при отправке медиа:', error)
-    if (error.response && error.response.error_code === 400) {
-      console.error(
-        `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа для отправки медиа.`
-      )
-      chatAccess = false // Обновляем статус доступа
-    } else {
-      console.error('Произошла ошибка при отправке медиа:', error)
-    }
   }
 }
 

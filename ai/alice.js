@@ -106,7 +106,7 @@ async function requestForAi(text, context = 'Политические новос
     Напиши текст так, как будто ты ведешь группу в Telegram, и твоя цель - удержать внимание аудитории и вызвать у неё интерес. Убери лишние кавычки и ненужные символы, добавь дружелюбный и доверительный тон.`
 
   try {
-    const response = await giga(
+    const response = await yandexGPT(
       prompt,
       `Обработка контента для группы: ${context}`
     )
