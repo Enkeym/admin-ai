@@ -4,8 +4,7 @@ import {
   downloadAndSendMedia,
   getUnreadMessages,
   watchNewMessages,
-  watchNewMessagesAi,
-  watchNewMessagesNoAds
+  watchNewMessagesAi
 } from './mediaHandler.js'
 
 export const bot = new Telegraf(tgToken)
@@ -18,21 +17,6 @@ bot.command('watch', async (ctx) => {
     currentProcess = await watchNewMessages(args)
     ctx.reply(
       `Наблюдение за новыми сообщениями из каналов/групп: ${args.join(', ')}`
-    )
-  } else {
-    ctx.reply('Вы не указали ID каналов/групп')
-  }
-})
-
-bot.command('watchNoAds', async (ctx) => {
-  if (currentProcess) currentProcess()
-  const args = ctx.message.text.split(' ').slice(1)
-  if (args.length > 0) {
-    currentProcess = await watchNewMessagesNoAds(args)
-    ctx.reply(
-      `Наблюдение за новыми сообщениями без рекламы из каналов/групп: ${args.join(
-        ', '
-      )}`
     )
   } else {
     ctx.reply('Вы не указали ID каналов/групп')

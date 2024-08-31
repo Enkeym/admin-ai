@@ -1,11 +1,17 @@
 import { bot } from './bot.js'
 import { client } from './telegramClient.js'
+import { myGroup } from './config.js'
+import { checkChatAccess } from './mediaHandler.js'
+
 ;(async function run() {
   try {
     if (!client.connected) {
       await client.connect()
       console.log('Telegram client connected.')
     }
+
+    // Проверка доступа к основному чату при инициализации
+    await checkChatAccess(myGroup)
 
     bot.launch()
     console.log('Bot launched.')
@@ -29,3 +35,14 @@ import { client } from './telegramClient.js'
     process.exit(1)
   }
 })()
+
+// Глобальные обработчики ошибок
+process.on('uncaughtException', (err) => {
+  console.error('There was an uncaught error', err)
+  // Дополнительно можно логировать ошибку или выполнить действия по очистке
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+  // Вы можете логировать это или предпринять иные действия
+})

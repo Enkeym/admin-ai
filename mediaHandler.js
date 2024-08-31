@@ -5,20 +5,63 @@ import { client } from './telegramClient.js'
 import { fileURLToPath } from 'url'
 import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
-import { checkForAds, requestForAi } from './ai/giga.js'
+import { checkForAds, requestForAi } from './ai/alice.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Функция для обрезки текста, если он слишком длинный
-function truncateText(text, maxLength = 1024) {
-  return text.length > maxLength
-    ? text.substring(0, maxLength - 3) + '...'
-    : text
+let chatAccess = false
+
+// Функция для проверки доступа к чату
+export async function checkChatAccess(chatId) {
+  try {
+    const chat = await bot.telegram.getChat(chatId)
+    console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
+    chatAccess = true
+  } catch (error) {
+    console.error(
+      `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`,
+      error
+    )
+    chatAccess = false
+  }
+}
+
+// Функция для отправки сообщений
+async function sendMessageToChat(chatId, message) {
+  if (!chatAccess) {
+    console.error(
+      `Бот не имеет доступа к чату с ID ${chatId}. Сообщение не отправлено.`
+    )
+    return
+  }
+
+  try {
+    console.log(`Попытка отправки сообщения в чат ${chatId}`)
+    await bot.telegram.sendMessage(chatId, message)
+    console.log('Сообщение успешно отправлено в чат.')
+  } catch (error) {
+    console.error('Ошибка при отправке сообщения:', error)
+    if (error.response && error.response.error_code === 400) {
+      console.error(
+        `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`
+      )
+      chatAccess = false // Обновляем статус доступа
+    } else {
+      console.error('Произошла ошибка при отправке сообщения:', error)
+    }
+  }
 }
 
 // Функция для скачивания и отправки медиа
 export async function downloadAndSendMedia(chatId, message) {
+  if (!chatAccess) {
+    console.error(
+      `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
+    )
+    return
+  }
+
   const filePath = path.join(__dirname, `${message.id}.gif`)
   console.log(`Скачивание медиа: ${filePath}`)
   await client.downloadMedia(message.media, { outputFile: filePath })
@@ -43,29 +86,35 @@ export async function downloadAndSendMedia(chatId, message) {
 
 // Функция для отправки медиа по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType) {
-  const truncatedCaption = truncateText(message.message)
+  if (!chatAccess) {
+    console.error(
+      `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
+    )
+    return
+  }
 
   try {
+    console.log(`Попытка отправки медиа в чат ${chatId}`)
     switch (mediaType) {
       case 'photo':
         await bot.telegram.sendPhoto(
           chatId,
           { source: mediaPath },
-          { caption: truncatedCaption }
+          { caption: message.message }
         )
         break
       case 'video':
         await bot.telegram.sendVideo(
           chatId,
           { source: mediaPath },
-          { caption: truncatedCaption }
+          { caption: message.message }
         )
         break
       case 'animation':
         await bot.telegram.sendAnimation(
           chatId,
           { source: mediaPath },
-          { caption: truncatedCaption }
+          { caption: message.message }
         )
         break
       default:
@@ -73,11 +122,20 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType) {
         await bot.telegram.sendDocument(
           chatId,
           { source: mediaPath },
-          { caption: truncatedCaption }
+          { caption: message.message }
         )
     }
+    console.log('Медиа успешно отправлено.')
   } catch (error) {
     console.error('Ошибка при отправке медиа:', error)
+    if (error.response && error.response.error_code === 400) {
+      console.error(
+        `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа для отправки медиа.`
+      )
+      chatAccess = false // Обновляем статус доступа
+    } else {
+      console.error('Произошла ошибка при отправке медиа:', error)
+    }
   }
 }
 
@@ -89,63 +147,16 @@ export async function watchNewMessages(channelIds) {
 
   for (const channelId of channelIds) {
     const handler = async (event) => {
-      const message = event.message
-      if (message.media) {
-        await downloadAndSendMedia(myGroup, message)
-      } else {
-        console.log('Медиа не найдено, отправка текстового сообщения')
-        await bot.telegram.sendMessage(myGroup, message.message)
-      }
-    }
-
-    client.addEventHandler(
-      handler,
-      new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    )
-    currentHandlers.push({
-      handler,
-      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    })
-  }
-
-  return () => {
-    currentHandlers.forEach(({ handler, event }) =>
-      client.removeEventHandler(handler, event)
-    )
-    console.log('Прекращено наблюдение за новыми сообщениями.')
-  }
-}
-
-export async function watchNewMessagesNoAds(channelIds) {
-  if (!client.connected) await client.connect()
-
-  const currentHandlers = []
-
-  for (const channelId of channelIds) {
-    const handler = async (event) => {
-      const message = event.message
-
       try {
-        // Проверка на наличие рекламы
-        const containsAds = await checkForAds(message.message)
-        if (containsAds) {
-          console.log('Сообщение содержит рекламу, пропуск...')
-          return
-        }
-
-        // Обработка медиа и текстовых сообщений
+        const message = event.message
         if (message.media) {
           await downloadAndSendMedia(myGroup, message)
         } else {
           console.log('Медиа не найдено, отправка текстового сообщения')
-          await bot.telegram.sendMessage(myGroup, message.message)
+          await sendMessageToChat(myGroup, message.message)
         }
       } catch (error) {
-        console.error('Ошибка при обработке сообщения:', error)
-        await bot.telegram.sendMessage(
-          myGroup,
-          'Произошла ошибка при обработке сообщения.'
-        )
+        console.error('Ошибка при обработке нового сообщения:', error)
       }
     }
 
@@ -175,9 +186,9 @@ export async function watchNewMessagesAi(channelIds) {
 
   for (const channelId of channelIds) {
     const handler = async (event) => {
-      const message = event.message
-
       try {
+        const message = event.message
+
         const containsAds = await checkForAds(message.message)
         if (containsAds) {
           console.log('Сообщение содержит рекламу, пропуск...')
@@ -185,17 +196,44 @@ export async function watchNewMessagesAi(channelIds) {
         }
 
         // Обработка текста AI
+        let processedMessage = await requestForAi(message.message)
+
+        const aiErrorMessages = [
+          'К сожалению, иногда генеративные языковые модели могут создавать некорректные ответы, основанные на открытых источниках. Во избежание неправильного толкования, ответы на вопросы, связанные с чувствительными темами, временно ограничены. Благодарим за понимание.',
+          'Есть темы, в которых я могу ошибиться. Лучше промолчу.',
+          'Извините, но я не могу помочь с этим запросом.',
+          'Мои ответы могут быть неточными или неполными, поэтому я предпочитаю не отвечать на этот вопрос.',
+          'Этот вопрос выходит за пределы моих возможностей, и я не могу дать вам ответ.',
+          'Прошу прощения, но я не могу предоставить информацию по этому запросу.',
+          'Ответ на этот вопрос может быть спорным, поэтому я не стану давать ответ.',
+          'Моя модель не может точно ответить на этот вопрос, пожалуйста, обратитесь к другому источнику.',
+          'Эта тема слишком сложна или неоднозначна для моего понимания, и я воздержусь от ответа.',
+          'Моя модель не предназначена для обработки такого типа запросов.',
+          'Как и любая языковая модель, GigaChat не обладает собственным мнением и не транслирует мнение своих разработчиков. Ответ сгенерирован нейросетевой моделью, обученной на открытых данных, в которых может содержаться неточная или ошибочная информация. Во избежание неправильного толкования, разговоры на некоторые темы временно ограничены.',
+          'На этот вопрос я не отвечу, потому что не очень разбираюсь.'
+        ]
+
+        if (
+          aiErrorMessages.some((errorMsg) =>
+            processedMessage.includes(errorMsg)
+          )
+        ) {
+          console.log(
+            'Сообщение содержит предупреждение ИИ, отправка без обработки AI'
+          )
+          processedMessage = message.message
+        }
+
         if (message.media) {
-          message.message = await requestForAi(message.message)
+          message.message = processedMessage
           await downloadAndSendMedia(myGroup, message)
         } else {
           console.log('Медиа не найдено, отправка текстового сообщения')
-          message.message = await requestForAi(message.message)
-          await bot.telegram.sendMessage(myGroup, message.message)
+          await sendMessageToChat(myGroup, processedMessage)
         }
       } catch (error) {
         console.error('Ошибка при обработке сообщения AI:', error)
-        await bot.telegram.sendMessage(
+        await sendMessageToChat(
           myGroup,
           'Произошла ошибка при обработке сообщения AI.'
         )
