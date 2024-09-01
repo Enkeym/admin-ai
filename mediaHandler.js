@@ -194,11 +194,11 @@ export async function watchNewMessagesAi(channelIds) {
         // Обработка текста AI
         let processedMessage = await requestForAi(message.message)
 
-        if (
-          aiErrorMessages.some((errorMsg) =>
-            processedMessage.includes(errorMsg)
-          )
-        ) {
+        const errorDetected = aiErrorMessages.some((errorMsg) =>
+          processedMessage.includes(errorMsg)
+        )
+
+        if (errorDetected) {
           console.log(
             'Сообщение содержит предупреждение ИИ, отправка без обработки AI'
           )
@@ -214,10 +214,7 @@ export async function watchNewMessagesAi(channelIds) {
         }
       } catch (error) {
         console.error('Ошибка при обработке сообщения AI:', error)
-        await sendMessageToChat(
-          myGroup,
-          'Произошла ошибка при обработке сообщения AI.'
-        )
+        await sendMessageToChat(myGroup, message.message)
       }
     }
 
