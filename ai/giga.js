@@ -31,12 +31,25 @@ async function getToken() {
 
   try {
     const response = await axios(config)
-    const { access_token: accessToken, expires_at: expiresAt } = response.data
-    cachedToken = accessToken
-    tokenExpiresAt = new Date(expiresAt * 1000)
-    return { accessToken, expiresAt }
+    if (
+      response.data &&
+      response.data.access_token &&
+      response.data.expires_at
+    ) {
+      const { access_token: accessToken, expires_at: expiresAt } = response.data
+      cachedToken = accessToken
+      tokenExpiresAt = new Date(expiresAt * 1000)
+      return { accessToken, expiresAt }
+    } else {
+      throw new Error(
+        'Не удалось получить access_token или expires_at из ответа'
+      )
+    }
   } catch (error) {
-    console.error('Ошибка при получении токена:', error)
+    console.error(
+      'Ошибка при получении токена:',
+      error.response ? error.response.data : error.message
+    )
     throw error
   }
 }
@@ -82,10 +95,17 @@ async function giga(content = '', system = '') {
     }
 
     const response = await axios(config)
-    const message = response.data.choices[0].message
-    return message.content
+    if (response.data && response.data.choices && response.data.choices[0]) {
+      const message = response.data.choices[0].message
+      return message.content
+    } else {
+      throw new Error('Не удалось получить корректный ответ от GigaChat API')
+    }
   } catch (error) {
-    console.error('Ошибка в функции giga:', error)
+    console.error(
+      'Ошибка в функции giga:',
+      error.response ? error.response.data : error.message
+    )
     throw error
   }
 }
@@ -111,9 +131,16 @@ async function checkForAds(text) {
       prompt,
       'Определение рекламы в тексте сообщения'
     )
-    return response.includes('Да')
+    if (response) {
+      return response.includes('Да')
+    } else {
+      throw new Error('GigaChat не вернул корректный ответ')
+    }
   } catch (error) {
-    console.error('Ошибка при проверке рекламы:', error)
+    console.error(
+      'Ошибка при проверке рекламы:',
+      error.response ? error.response.data : error.message
+    )
     throw error
   }
 }
@@ -140,9 +167,16 @@ async function requestForAi(text, context = 'Политика') {
       prompt,
       `Обработка контента для группы: ${context}`
     )
-    return response
+    if (response) {
+      return response
+    } else {
+      throw new Error('GigaChat не вернул корректный ответ на запрос')
+    }
   } catch (error) {
-    console.error('Ошибка при обработке контента для группы:', error)
+    console.error(
+      'Ошибка при обработке контента для группы:',
+      error.response ? error.response.data : error.message
+    )
     throw error
   }
 }

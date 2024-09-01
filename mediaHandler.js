@@ -48,7 +48,10 @@ async function sendMessageToChat(chatId, message) {
     await bot.telegram.sendMessage(chatId, message)
     console.log('Сообщение успешно отправлено в чат.')
   } catch (error) {
-    console.error('Ошибка при отправке сообщения:', error)
+    console.error(
+      'Ошибка при отправке сообщения:',
+      error.response ? error.response.data : error.message
+    )
   }
 }
 
@@ -131,7 +134,10 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType) {
     }
     console.log('Медиа успешно отправлено.')
   } catch (error) {
-    console.error('Ошибка при отправке медиа:', error)
+    console.error(
+      'Ошибка при отправке медиа:',
+      error.response ? error.response.data : error.message
+    )
   }
 }
 
@@ -152,7 +158,10 @@ export async function watchNewMessages(channelIds) {
           await sendMessageToChat(myGroup, message.message)
         }
       } catch (error) {
-        console.error('Ошибка при обработке нового сообщения:', error)
+        console.error(
+          'Ошибка при обработке нового сообщения:',
+          error.response ? error.response.data : error.message
+        )
       }
     }
 
@@ -213,7 +222,10 @@ export async function watchNewMessagesAi(channelIds) {
           await sendMessageToChat(myGroup, processedMessage)
         }
       } catch (error) {
-        console.error('Ошибка при обработке сообщения AI:', error)
+        console.error(
+          'Ошибка при обработке сообщения AI:',
+          error.response ? error.response.data : error.message
+        )
         await sendMessageToChat(myGroup, message.message)
       }
     }
