@@ -39,7 +39,7 @@ async function getToken() {
       const { access_token: accessToken, expires_at: expiresAt } = response.data
       cachedToken = accessToken
       tokenExpiresAt = new Date(expiresAt * 1000)
-      return { accessToken, expiresAt }
+      return { accessToken, expiresAt: tokenExpiresAt }
     } else {
       throw new Error(
         'Не удалось получить access_token или expires_at из ответа'
@@ -59,11 +59,6 @@ async function giga(content = '', system = '') {
   try {
     let token = await getToken()
 
-    if (!token || new Date() >= token.expiresAt) {
-      console.log('Токен истек, получаем новый токен...')
-      token = await getToken()
-    }
-
     const messages = []
     if (system) {
       messages.push({ role: 'system', content: system })
@@ -71,12 +66,7 @@ async function giga(content = '', system = '') {
 
     const data = JSON.stringify({
       model: 'GigaChat',
-      messages: messages.concat([
-        {
-          role: 'user',
-          content
-        }
-      ]),
+      messages: messages.concat([{ role: 'user', content }]),
       temperature: 1,
       top_p: 0.1,
       n: 1,
@@ -106,8 +96,7 @@ async function giga(content = '', system = '') {
       response.data.choices[0] &&
       response.data.choices[0].message
     ) {
-      const message = response.data.choices[0].message
-      return message.content
+      return response.data.choices[0].message.content
     } else {
       throw new Error('Не удалось получить корректный ответ от GigaChat API')
     }
@@ -141,11 +130,7 @@ async function checkForAds(text) {
       prompt,
       'Определение рекламы в тексте сообщения'
     )
-    if (response) {
-      return response.includes('Да')
-    } else {
-      throw new Error('GigaChat не вернул корректный ответ')
-    }
+    return response.includes('Да')
   } catch (error) {
     console.error(
       'Ошибка при проверке рекламы:',
@@ -173,15 +158,7 @@ async function requestForAi(text, context = 'Политика') {
 Перепиши текст так, чтобы он выглядел как новостная лента, с минимальными изменениями формулировок, сохраняя оригинальный смысл и убирая лишние элементы.`
 
   try {
-    const response = await giga(
-      prompt,
-      `Обработка контента для группы: ${context}`
-    )
-    if (response) {
-      return response
-    } else {
-      throw new Error('GigaChat не вернул корректный ответ на запрос')
-    }
+    return await giga(prompt, `Обработка контента для группы: ${context}`)
   } catch (error) {
     console.error(
       'Ошибка при обработке контента для группы:',

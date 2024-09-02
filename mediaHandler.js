@@ -204,7 +204,7 @@ export async function watchNewMessagesAi(channelIds) {
         let processedMessage = await requestForAi(message.message)
 
         const errorDetected = aiErrorMessages.some((errorMsg) =>
-          processedMessage.includes(errorMsg)
+          processedMessage.toLowerCase().includes(errorMsg)
         )
 
         if (errorDetected) {
