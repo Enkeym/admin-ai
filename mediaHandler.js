@@ -203,8 +203,13 @@ export async function watchNewMessagesAi(channelIds) {
         // Обработка текста AI
         let processedMessage = await requestForAi(message.message)
 
+        // Удаление пробелов и приведение к нижнему регистру для точного сравнения
+        const normalizedMessage = processedMessage
+          .replace(/\s+/g, '')
+          .toLowerCase()
+
         const errorDetected = aiErrorMessages.some((errorMsg) =>
-          processedMessage.toLowerCase().includes(errorMsg)
+          normalizedMessage.includes(errorMsg.replace(/\s+/g, '').toLowerCase())
         )
 
         if (errorDetected) {
@@ -214,13 +219,15 @@ export async function watchNewMessagesAi(channelIds) {
           processedMessage = message.message
         }
 
-        if (message.media) {
-          message.message = processedMessage
-          await downloadAndSendMedia(myGroup, message)
-        } else {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, processedMessage)
-        }
+        setTimeout(async () => {
+          if (message.media) {
+            message.message = processedMessage
+            await downloadAndSendMedia(myGroup, message)
+          } else {
+            console.log('Медиа не найдено, отправка текстового сообщения')
+            await sendMessageToChat(myGroup, processedMessage)
+          }
+        }, 3000)
       } catch (error) {
         console.error(
           'Ошибка при обработке сообщения AI:',
