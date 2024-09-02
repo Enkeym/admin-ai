@@ -57,7 +57,12 @@ async function getToken() {
 // Функция для взаимодействия с GigaChat API
 async function giga(content = '', system = '') {
   try {
-    const token = await getToken()
+    let token = await getToken()
+
+    if (!token || new Date() >= token.expiresAt) {
+      console.log('Токен истек, получаем новый токен...')
+      token = await getToken()
+    }
 
     const messages = []
     if (system) {
@@ -95,7 +100,12 @@ async function giga(content = '', system = '') {
     }
 
     const response = await axios(config)
-    if (response.data && response.data.choices && response.data.choices[0]) {
+    if (
+      response.data &&
+      response.data.choices &&
+      response.data.choices[0] &&
+      response.data.choices[0].message
+    ) {
       const message = response.data.choices[0].message
       return message.content
     } else {
