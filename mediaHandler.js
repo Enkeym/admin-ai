@@ -47,7 +47,6 @@ async function sendMessageToChat(chatId, message, ctx) {
     console.log(`Попытка отправки сообщения в чат ${chatId}`)
     await bot.telegram.sendMessage(chatId, message)
     console.log('Сообщение успешно отправлено в чат.')
-    if (ctx) ctx.reply('Сообщение успешно отправлено в чат.')
   } catch (error) {
     console.error(
       'Ошибка при отправке сообщения:',
@@ -138,7 +137,6 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
         )
     }
     console.log('Медиа успешно отправлено.')
-    if (ctx) ctx.reply('Медиа успешно отправлено.')
   } catch (error) {
     console.error(
       'Ошибка при отправке медиа:',
