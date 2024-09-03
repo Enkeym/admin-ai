@@ -101,11 +101,28 @@ async function giga(content = '', system = '') {
       throw new Error('Не удалось получить корректный ответ от GigaChat API')
     }
   } catch (error) {
-    console.error(
-      'Ошибка в функции giga:',
-      error.response ? error.response.data : error.message
-    )
-    throw error
+    // Проверяем, если ошибка 401 - токен истек
+    if (error.response && error.response.status === 401) {
+      console.log('Токен истек, получаем новый токен...')
+      cachedToken = null // сбросим кешированный токен, чтобы получить новый
+      try {
+        // Повторяем запрос с новым токеном
+        const token = await getToken()
+        return await giga(content, system) // повторный вызов функции с новыми токеном
+      } catch (err) {
+        console.error(
+          'Не удалось получить новый токен или повторить запрос:',
+          err.message
+        )
+        throw err
+      }
+    } else {
+      console.error(
+        'Ошибка в функции giga:',
+        error.response ? error.response.data : error.message
+      )
+      throw error
+    }
   }
 }
 
@@ -126,17 +143,18 @@ async function checkForAds(text) {
   `
 
   try {
-    const response = await giga(
-      prompt,
-      'Определение рекламы в тексте сообщения'
-    )
-    return response.includes('Да')
+    return await giga(prompt, 'Определение рекламы в тексте сообщения')
   } catch (error) {
-    console.error(
-      'Ошибка при проверке рекламы:',
-      error.response ? error.response.data : error.message
-    )
-    throw error
+    if (error.response && error.response.status === 401) {
+      console.log('Токен истек при проверке рекламы, получаем новый...')
+      return await checkForAds(text) // Повторяем запрос с новым токеном
+    } else {
+      console.error(
+        'Ошибка при проверке рекламы:',
+        error.response ? error.response.data : error.message
+      )
+      throw error
+    }
   }
 }
 
@@ -160,11 +178,16 @@ async function requestForAi(text, context = 'Политика') {
   try {
     return await giga(prompt, `Обработка контента для группы: ${context}`)
   } catch (error) {
-    console.error(
-      'Ошибка при обработке контента для группы:',
-      error.response ? error.response.data : error.message
-    )
-    throw error
+    if (error.response && error.response.status === 401) {
+      console.log('Токен истек при обработке сообщения AI, получаем новый...')
+      return await requestForAi(text, context) // Повторяем запрос с новым токеном
+    } else {
+      console.error(
+        'Ошибка при обработке контента для группы:',
+        error.response ? error.response.data : error.message
+      )
+      throw error
+    }
   }
 }
 
