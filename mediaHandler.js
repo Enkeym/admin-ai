@@ -278,7 +278,6 @@ export async function watchNewMessagesAi(channelIds, ctx) {
           'Ошибка при обработке сообщения AI:',
           error.response ? error.response.data : error.message
         )
-        if (ctx) ctx.reply('Ошибка при обработке сообщения AI.')
         await sendMessageToChat(myGroup, message.message, ctx)
       }
     }
