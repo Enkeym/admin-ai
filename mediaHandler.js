@@ -118,7 +118,7 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
         await bot.telegram.sendVideo(
           chatId,
           { source: mediaPath },
-          { caption: message.message }
+          { caption: message.message, supports_streaming: true }
         )
         break
       case 'animation':
