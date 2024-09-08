@@ -7,6 +7,7 @@ import { NewMessage } from 'telegram/events/NewMessage.js'
 import { myGroup } from './config.js'
 import { aiErrorMessages } from './utils/aiErrorMessages.js'
 import { checkForAds, requestForAi } from './ai/giga.js'
+import ffmpeg from 'fluent-ffmpeg'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -73,7 +74,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  const filePath = path.join(__dirname, `${message.id}.gif`)
+  const filePath = path.join(__dirname, `${message.id}.mp4`) // Сохраняем видео как .mp4
   console.log(`Скачивание медиа: ${filePath}`)
   await client.downloadMedia(message.media, { outputFile: filePath })
 
@@ -87,11 +88,55 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   }
 
   console.log(`Тип медиа из сообщения: ${mediaType}`)
-  await sendMediaByType(chatId, message, filePath, mediaType, ctx)
 
-  fs.unlink(filePath, (err) => {
-    if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
-    else console.log(`Файл удален: ${filePath}`)
+  // Добавляем конвертацию видео перед отправкой
+  if (mediaType === 'video') {
+    const convertedFilePath = path.join(
+      __dirname,
+      `${message.id}-converted.mp4`
+    )
+    await convertVideoToMP4(filePath, convertedFilePath)
+
+    // Отправка конвертированного видео
+    await sendMediaByType(chatId, message, convertedFilePath, 'video', ctx)
+
+    // Удаляем временные файлы
+    fs.unlink(filePath, (err) => {
+      if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
+      else console.log(`Файл удален: ${filePath}`)
+    })
+
+    fs.unlink(convertedFilePath, (err) => {
+      if (err)
+        console.error(`Не удалось удалить файл: ${convertedFilePath}`, err)
+      else console.log(`Файл удален: ${convertedFilePath}`)
+    })
+  } else {
+    // Отправляем другие типы медиа
+    await sendMediaByType(chatId, message, filePath, mediaType, ctx)
+
+    fs.unlink(filePath, (err) => {
+      if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
+      else console.log(`Файл удален: ${filePath}`)
+    })
+  }
+}
+
+// Функция для конвертации видео с использованием FFmpeg
+async function convertVideoToMP4(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .output(outputPath)
+      .format('mp4')
+      .on('end', () => {
+        console.log(`Видео успешно конвертировано: ${outputPath}`)
+        resolve(outputPath)
+      })
+      .on('error', (err) => {
+        console.error('Ошибка при конвертации видео:', err)
+        reject(err)
+      })
+      .run()
   })
 }
 
