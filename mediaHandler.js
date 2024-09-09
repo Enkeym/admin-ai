@@ -127,7 +127,17 @@ async function convertVideoToMP4(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
       .output(outputPath)
-      .format('mp4')
+      .videoCodec('libx264') 
+      .audioCodec('aac')     
+      .format('mp4')         
+      .outputOptions([
+        '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2', 
+        '-preset fast',     
+        '-crf 23',           
+        '-movflags +faststart', 
+        '-pix_fmt yuv420p',  
+        '-vf "scale=1280:720"', 
+      ])
       .on('end', () => {
         console.log(`Видео успешно конвертировано: ${outputPath}`)
         resolve(outputPath)
@@ -139,6 +149,7 @@ async function convertVideoToMP4(inputPath, outputPath) {
       .run()
   })
 }
+
 
 // Функция для отправки медиа по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
