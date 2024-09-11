@@ -4,10 +4,12 @@ WORKDIR /index
 
 COPY package*.json ./
 
-RUN npm ci
+COPY yarn.lock ./
+
+RUN yarn install --frozen-lockfile
 
 COPY . .
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["yarn", "start"]
