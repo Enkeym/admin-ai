@@ -127,16 +127,16 @@ async function convertVideoToMP4(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
       .output(outputPath)
-      .videoCodec('libx264') 
-      .audioCodec('aac')     
-      .format('mp4')         
+      .videoCodec('libx264')
+      .audioCodec('aac')
+      .format('mp4')
       .outputOptions([
-        '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2', 
-        '-preset fast',     
-        '-crf 23',           
-        '-movflags +faststart', 
-        '-pix_fmt yuv420p',  
-        '-vf "scale=1280:720"', 
+        '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2',
+        '-preset fast',
+        '-crf 23',
+        '-movflags +faststart',
+        '-pix_fmt yuv420p',
+        '-vf "scale=1280:720"'
       ])
       .on('end', () => {
         console.log(`Видео успешно конвертировано: ${outputPath}`)
@@ -149,7 +149,6 @@ async function convertVideoToMP4(inputPath, outputPath) {
       .run()
   })
 }
-
 
 // Функция для отправки медиа по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
@@ -228,7 +227,7 @@ export async function watchNewMessages(channelIds, ctx) {
   for (const channelId of channelIds) {
     const chat = await validateChannelOrGroup(channelId, ctx)
     if (!chat) {
-      continue // Пропускаем этот канал/группу, если он не найден
+      continue
     }
 
     const handler = async (event) => {
@@ -270,6 +269,36 @@ export async function watchNewMessages(channelIds, ctx) {
   }
 }
 
+// Функция для обработки сообщения с ИИ с повторными попытками
+async function processMessageWithAi(message, maxAttempts = 3) {
+  let processedMessage = null
+  let attempts = 0
+
+  while (attempts < maxAttempts) {
+    try {
+      console.log(`Попытка ${attempts + 1}: запрос к ИИ`)
+      // Запрос к ИИ
+      processedMessage = await requestForAi(message.message)
+
+      if (processedMessage) {
+        console.log('Ответ ИИ получен.')
+        return processedMessage // Возвращаем обработанное сообщение
+      }
+    } catch (error) {
+      attempts++
+      console.error(
+        `Ошибка при запросе к ИИ (попытка ${attempts}):`,
+        error.message
+      )
+
+      if (attempts >= maxAttempts) {
+        console.log('Все попытки исчерпаны, используем исходное сообщение.')
+        return message.message // Возвращаем исходное сообщение в случае неудачи
+      }
+    }
+  }
+}
+
 // Функция для наблюдения за новыми сообщениями с AI
 export async function watchNewMessagesAi(channelIds, ctx) {
   if (!client.connected) await client.connect()
@@ -279,55 +308,29 @@ export async function watchNewMessagesAi(channelIds, ctx) {
   for (const channelId of channelIds) {
     const chat = await validateChannelOrGroup(channelId, ctx)
     if (!chat) {
-      continue // Пропускаем этот канал/группу, если он не найден
+      continue
     }
 
     const handler = async (event) => {
       try {
         const message = event.message
 
+        // Проверка на рекламу
         const containsAds = await checkForAds(message.message)
         if (containsAds === 'Да') {
           console.log('Сообщение содержит рекламу, пропуск...')
           return
         }
 
-        // Обработка текста AI
-        let processedMessage = await requestForAi(message.message)
+        // Обработка сообщения с AI с повторными попытками
+        let processedMessage = await processMessageWithAi(message)
 
-        const normalizedMessage = processedMessage
-          .replace(/\s+/g, '')
-          .toLowerCase()
-
-        const errorDetected = aiErrorMessages.some((errorMsg) =>
-          normalizedMessage.includes(errorMsg.replace(/\s+/g, '').toLowerCase())
-        )
-
-        if (errorDetected) {
-          console.log(
-            'Сообщение содержит предупреждение ИИ, отправка без обработки AI'
-          )
-          processedMessage = message.message
-        }
-
-        const sendMessageWithDelay = async (msg, delay) => {
-          return new Promise((resolve) => {
-            setTimeout(async () => {
-              if (msg.media) {
-                msg.message = processedMessage
-                await downloadAndSendMedia(myGroup, msg)
-              } else {
-                console.log('Медиа не найдено, отправка текстового сообщения')
-                await sendMessageToChat(myGroup, processedMessage, ctx)
-              }
-              resolve()
-            }, delay)
-          })
-        }
-
-        const messages = [message]
-        for (let i = 0; i < messages.length; i++) {
-          await sendMessageWithDelay(messages[i], i * 60000)
+        if (message.media) {
+          message.message = processedMessage
+          await downloadAndSendMedia(myGroup, message, ctx)
+        } else {
+          console.log('Медиа не найдено, отправка текстового сообщения')
+          await sendMessageToChat(myGroup, processedMessage, ctx)
         }
       } catch (error) {
         console.error(
@@ -355,8 +358,9 @@ export async function watchNewMessagesAi(channelIds, ctx) {
       client.removeEventHandler(handler, event)
     )
     console.log('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
-    if (ctx)
+    if (ctx) {
       ctx.reply('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
+    }
   }
 }
 

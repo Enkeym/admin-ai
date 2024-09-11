@@ -16,6 +16,7 @@ async function getToken() {
   const config = {
     method: 'post',
     maxBodyLength: Infinity,
+    timeout: 30000,
     url: 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -71,7 +72,7 @@ async function giga(content = '', system = '') {
       top_p: 0.1,
       n: 1,
       stream: false,
-      max_tokens: 512,
+      max_tokens: 1024,
       repetition_penalty: 1,
       update_interval: 0
     })
@@ -159,11 +160,11 @@ async function checkForAds(text) {
 // Функция для обработки политического контента
 async function requestForAi(text) {
   const prompt = `
-  Перепиши следующий текст, сохранив его смысл полностью, но заменив некоторые слова синонимами. Не добавляй новую информацию и не повторяй содержание текста.
+  Перепиши текст ниже, сохранив его смысл и структуру, но заменив некоторые слова на синонимы. Не добавляй никаких новых деталей, объяснений или повторений.
   
   Исходный текст: ${text}
 
-  Пожалуйста, просто перепиши текст, не добавляя лишних деталей.
+  Перепиши текст только с минимальными изменениями.
   `
 
   try {
