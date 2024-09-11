@@ -74,7 +74,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  const filePath = path.join(__dirname, `${message.id}.mp4`) // Сохраняем видео как .mp4
+  const filePath = path.join(__dirname, `${message.id}.mp4`)
   console.log(`Скачивание медиа: ${filePath}`)
   await client.downloadMedia(message.media, { outputFile: filePath })
 
@@ -89,7 +89,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
   console.log(`Тип медиа из сообщения: ${mediaType}`)
 
-  // Добавляем конвертацию видео перед отправкой
   if (mediaType === 'video') {
     const convertedFilePath = path.join(
       __dirname,
@@ -97,10 +96,8 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     )
     await convertVideoToMP4(filePath, convertedFilePath)
 
-    // Отправка конвертированного видео
     await sendMediaByType(chatId, message, convertedFilePath, 'video', ctx)
 
-    // Удаляем временные файлы
     fs.unlink(filePath, (err) => {
       if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
       else console.log(`Файл удален: ${filePath}`)
@@ -112,7 +109,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       else console.log(`Файл удален: ${convertedFilePath}`)
     })
   } else {
-    // Отправляем другие типы медиа
     await sendMediaByType(chatId, message, filePath, mediaType, ctx)
 
     fs.unlink(filePath, (err) => {
@@ -277,8 +273,22 @@ async function processMessageWithAi(message, maxAttempts = 3) {
   while (attempts < maxAttempts) {
     try {
       console.log(`Попытка ${attempts + 1}: запрос к ИИ`)
-      // Запрос к ИИ
+
       processedMessage = await requestForAi(message.message)
+
+      const normalizedMessage = processedMessage
+        .replace(/\s+/g, '')
+        .toLowerCase()
+      const errorDetected = aiErrorMessages.some((errorMsg) =>
+        normalizedMessage.includes(errorMsg.replace(/\s+/g, '').toLowerCase())
+      )
+
+      if (errorDetected) {
+        console.log(
+          'Сообщение содержит предупреждение ИИ, возвращаем оригинальное сообщение.'
+        )
+        return message.message
+      }
 
       if (processedMessage) {
         console.log('Ответ ИИ получен.')
@@ -325,6 +335,7 @@ export async function watchNewMessagesAi(channelIds, ctx) {
         // Обработка сообщения с AI с повторными попытками
         let processedMessage = await processMessageWithAi(message)
 
+        // Отправка сообщения
         if (message.media) {
           message.message = processedMessage
           await downloadAndSendMedia(myGroup, message, ctx)
@@ -337,6 +348,7 @@ export async function watchNewMessagesAi(channelIds, ctx) {
           'Ошибка при обработке сообщения AI:',
           error.response ? error.response.data : error.message
         )
+        // Если ошибка, отправляем оригинальное сообщение
         await sendMessageToChat(myGroup, message.message, ctx)
       }
     }
