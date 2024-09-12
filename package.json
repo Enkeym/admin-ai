@@ -4,11 +4,6 @@
   "description": "",
   "main": "index.js",
   "type": "module",
-  "licenses": [
-    {
-      "url": "https://github.com/Enkeym/admin-ai"
-    }
-  ],
   "homepage": "https://github.com/Enkeym/admin-ai",
   "scripts": {
     "start": "node index.js",
