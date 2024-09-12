@@ -164,8 +164,17 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
     }
     console.log('Медиа успешно отправлено.')
   } catch (error) {
-    console.error('Ошибка при отправке медиа:', error.message)
-    if (ctx) ctx.reply('Ошибка при отправке медиа.')
+    if (
+      error.response &&
+      (error.response.error_code === 413 || error.response.error_code === 400)
+    ) {
+      console.log(
+        `Пропуск сообщения с ошибкой ${error.response.error_code}: ${error.message}`
+      )
+    } else {
+      console.error('Ошибка при отправке медиа:', error.message)
+      if (ctx) ctx.reply('Ошибка при отправке медиа.')
+    }
   }
 }
 
@@ -255,24 +264,40 @@ export async function watchNewMessages(channelIds, ctx) {
 function containsAiErrorMessage(response) {
   const normalizedResponse = response.trim().toLowerCase()
 
-  // Проверка на полное или частичное совпадение с известными сообщениями
   const isAiErrorMessage = aiErrorMessages.some((errorMsg) => {
     const normalizedErrorMsg = errorMsg.toLowerCase()
     return normalizedResponse.includes(normalizedErrorMsg)
   })
 
-  // Проверка по дополнительным ключевым словам и шаблонам
-  const containsAdditionalPatterns = additionalPatterns.some((pattern) =>
-    normalizedResponse.includes(pattern.toLowerCase())
-  )
+  if (isAiErrorMessage) {
+    console.log('Сообщение полностью совпадает с известной ошибкой ИИ.')
+    return true
+  }
 
-  return isAiErrorMessage || containsAdditionalPatterns
+  const containsAdditionalPatterns = additionalPatterns.some((pattern) => {
+    const regex = new RegExp(pattern, 'i')
+    return regex.test(normalizedResponse)
+  })
+
+  if (containsAdditionalPatterns) {
+    console.log('Сообщение содержит чувствительные ключевые слова или шаблоны.')
+  }
+
+  return containsAdditionalPatterns
 }
 
 // Функция для обработки сообщения с ИИ
 async function processMessageWithAi(message) {
   try {
     console.log('Запрос к ИИ для обработки сообщения.')
+
+    if (containsAiErrorMessage(message.message)) {
+      console.log(
+        'Исходное сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку ИИ.'
+      )
+      return message.message
+    }
+
     const processedMessage = await requestForAi(message.message)
 
     if (containsAiErrorMessage(processedMessage)) {
@@ -282,7 +307,7 @@ async function processMessageWithAi(message) {
       return message.message
     }
 
-    console.log('Ответ ИИ получен.')
+    console.log('Ответ ИИ получен и обработан.')
     return processedMessage
   } catch (error) {
     console.error('Ошибка при запросе к ИИ:', error.message)
@@ -309,6 +334,14 @@ export async function watchNewMessagesAi(channelIds, ctx) {
         const containsAds = await checkForAds(message.message)
         if (containsAds === 'Да') {
           console.log('Сообщение содержит рекламу, пропуск...')
+          return
+        }
+
+        if (containsAiErrorMessage(message.message)) {
+          console.log(
+            'Сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку AI.'
+          )
+          await sendMessageToChat(myGroup, message.message, ctx)
           return
         }
 
