@@ -40,6 +40,25 @@ export async function checkChatAccess(chatId) {
   }
 }
 
+// Функция для отправки сообщений
+async function sendMessageToChat(chatId, message, ctx) {
+  if (!(await checkChatAccess(chatId))) {
+    const errorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Сообщение не отправлено.`
+    console.error(errorMessage)
+    if (ctx) ctx.reply(errorMessage)
+    return
+  }
+
+  try {
+    console.log(`Попытка отправки сообщения в чат ${chatId}`)
+    await bot.telegram.sendMessage(chatId, message)
+    console.log('Сообщение успешно отправлено в чат.')
+  } catch (error) {
+    console.error('Ошибка при отправке сообщения:', error.message)
+    if (ctx) ctx.reply('Ошибка при отправке сообщения.')
+  }
+}
+
 // Функция для скачивания и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message.message || !message.message.trim()) {
