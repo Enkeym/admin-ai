@@ -15,13 +15,33 @@ const __dirname = path.dirname(__filename)
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
+// Функция для ожидания (задержки)
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Функция для повторных попыток с экспоненциальной задержкой
+async function retryWithBackoff(fn, retries = 5, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (error.code === -500 && i < retries - 1) {
+        console.log(`Ошибка -500, попытка повтора через ${delay} мс...`)
+        await sleep(delay)
+        delay *= 2 // Экспоненциальная задержка
+      } else {
+        throw error
+      }
+    }
+  }
+}
+
 // Функция для проверки доступа к чату
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
     return chatAccessCache.get(chatId)
   }
   try {
-    const chat = await client.getEntity(chatId)
+    const chat = await retryWithBackoff(() => client.getEntity(chatId))
 
     if (!foundChannelsCache.has(chatId)) {
       console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
@@ -51,7 +71,7 @@ async function sendMessageToChat(chatId, message, ctx) {
 
   try {
     console.log(`Попытка отправки сообщения в чат ${chatId}`)
-    await bot.telegram.sendMessage(chatId, message)
+    await retryWithBackoff(() => bot.telegram.sendMessage(chatId, message))
     console.log('Сообщение успешно отправлено в чат.')
   } catch (error) {
     console.error('Ошибка при отправке сообщения:', error.message)
@@ -65,7 +85,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     const noTextMessage =
       'Сообщение не содержит текста, медиа не будет отправлено.'
     console.log(noTextMessage)
-    if (ctx) ctx.reply(noTextMessage)
+    // Убираем отправку этого сообщения в чат
     return
   }
 
@@ -83,8 +103,10 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
   console.log(`Скачивание медиа: ${filePath}`)
 
-  // Скачиваем файл
-  await client.downloadMedia(message.media, { outputFile: filePath })
+  // Скачиваем файл с повтором в случае ошибки
+  await retryWithBackoff(() =>
+    client.downloadMedia(message.media, { outputFile: filePath })
+  )
 
   // Определение типа медиа
   let mediaType = 'document'
@@ -128,38 +150,48 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
     console.log(`Попытка отправки медиа в чат ${chatId}`)
     switch (mediaType) {
       case 'photo':
-        await bot.telegram.sendPhoto(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
+        await retryWithBackoff(() =>
+          bot.telegram.sendPhoto(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
         )
         break
       case 'video':
-        await bot.telegram.sendVideo(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
+        await retryWithBackoff(() =>
+          bot.telegram.sendVideo(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
         )
         break
       case 'document':
-        await bot.telegram.sendDocument(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
+        await retryWithBackoff(() =>
+          bot.telegram.sendDocument(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
         )
         break
       case 'animation':
-        await bot.telegram.sendAnimation(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
+        await retryWithBackoff(() =>
+          bot.telegram.sendAnimation(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
         )
         break
       default:
-        await bot.telegram.sendDocument(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
+        await retryWithBackoff(() =>
+          bot.telegram.sendDocument(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
         )
     }
     console.log('Медиа успешно отправлено.')
@@ -174,213 +206,6 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
     } else {
       console.error('Ошибка при отправке медиа:', error.message)
       if (ctx) ctx.reply('Ошибка при отправке медиа.')
-    }
-  }
-}
-
-// Функция для получения непрочитанных сообщений
-export async function getUnreadMessages(channelId, limit = 1, ctx) {
-  if (!client.connected) await client.connect()
-
-  const chat = await validateChannelOrGroup(channelId, ctx)
-  if (!chat) {
-    return 'Канал или группа не найдены'
-  }
-
-  if (ctx) ctx.reply(`Получены непрочитанные сообщения из канала ${channelId}.`)
-  return await client.getMessages(chat, { limit })
-}
-
-// Функция для проверки существования канала/группы
-export async function validateChannelOrGroup(channelId, ctx) {
-  try {
-    const chat = await client.getEntity(channelId)
-
-    if (!foundChannelsCache.has(channelId)) {
-      console.log(`Канал/группа с ID ${channelId} успешно найден.`)
-      foundChannelsCache.add(channelId)
-    }
-
-    return chat
-  } catch (error) {
-    const errorMessage = `Канал или группа с ID ${channelId} не найдены. Пожалуйста, проверьте правильность введённого ID.`
-    console.error(errorMessage)
-
-    if (ctx) ctx.reply(errorMessage)
-
-    return null
-  }
-}
-
-// Функция для наблюдения за новыми сообщениями
-export async function watchNewMessages(channelIds, ctx) {
-  if (!client.connected) await client.connect()
-
-  const currentHandlers = []
-
-  for (const channelId of channelIds) {
-    const chat = await validateChannelOrGroup(channelId, ctx)
-    if (!chat) {
-      continue
-    }
-
-    const handler = async (event) => {
-      try {
-        const message = event.message
-        if (message.media) {
-          await downloadAndSendMedia(myGroup, message, ctx)
-        } else {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, message.message, ctx)
-        }
-      } catch (error) {
-        console.error('Ошибка при обработке нового сообщения:', error.message)
-        if (ctx) ctx.reply('Ошибка при обработке нового сообщения.')
-      }
-    }
-
-    client.addEventHandler(
-      handler,
-      new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    )
-    currentHandlers.push({
-      handler,
-      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    })
-  }
-
-  if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями.')
-
-  return (ctx) => {
-    currentHandlers.forEach(({ handler, event }) => {
-      client.removeEventHandler(handler, event)
-    })
-    console.log('Прекращено наблюдение за новыми сообщениями.')
-    if (ctx) ctx.reply('Прекращено наблюдение за новыми сообщениями.')
-  }
-}
-
-// Функция для проверки наличия сообщения с ошибкой ИИ
-function containsAiErrorMessage(response) {
-  const normalizedResponse = response.trim().toLowerCase()
-
-  const isAiErrorMessage = aiErrorMessages.some((errorMsg) => {
-    const normalizedErrorMsg = errorMsg.toLowerCase()
-    return normalizedResponse.includes(normalizedErrorMsg)
-  })
-
-  if (isAiErrorMessage) {
-    console.log('Сообщение полностью совпадает с известной ошибкой ИИ.')
-    return true
-  }
-
-  const containsAdditionalPatterns = additionalPatterns.some((pattern) => {
-    const regex = new RegExp(pattern, 'i')
-    return regex.test(normalizedResponse)
-  })
-
-  if (containsAdditionalPatterns) {
-    console.log('Сообщение содержит чувствительные ключевые слова или шаблоны.')
-  }
-
-  return containsAdditionalPatterns
-}
-
-// Функция для обработки сообщения с ИИ
-async function processMessageWithAi(message) {
-  try {
-    console.log('Запрос к ИИ для обработки сообщения.')
-
-    if (containsAiErrorMessage(message.message)) {
-      console.log(
-        'Исходное сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку ИИ.'
-      )
-      return message.message
-    }
-
-    const processedMessage = await requestForAi(message.message)
-
-    if (containsAiErrorMessage(processedMessage)) {
-      console.log(
-        'Ответ ИИ содержит ошибку или чувствительный ответ. Возвращаем исходное сообщение.'
-      )
-      return message.message
-    }
-
-    console.log('Ответ ИИ получен и обработан.')
-    return processedMessage
-  } catch (error) {
-    console.error('Ошибка при запросе к ИИ:', error.message)
-    return message.message
-  }
-}
-
-// Функция для наблюдения за новыми сообщениями с AI
-export async function watchNewMessagesAi(channelIds, ctx) {
-  if (!client.connected) await client.connect()
-
-  const currentHandlers = []
-
-  for (const channelId of channelIds) {
-    const chat = await validateChannelOrGroup(channelId, ctx)
-    if (!chat) {
-      continue
-    }
-
-    const handler = async (event) => {
-      try {
-        const message = event.message
-
-        const containsAds = await checkForAds(message.message)
-        if (containsAds === 'Да') {
-          console.log('Сообщение содержит рекламу, пропуск...')
-          return
-        }
-
-        if (containsAiErrorMessage(message.message)) {
-          console.log(
-            'Сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку AI.'
-          )
-          await sendMessageToChat(myGroup, message.message, ctx)
-          return
-        }
-
-        let processedMessage = await processMessageWithAi(message)
-
-        if (message.media) {
-          message.message = processedMessage
-          await downloadAndSendMedia(myGroup, message, ctx)
-        } else {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, processedMessage, ctx)
-        }
-      } catch (error) {
-        console.error('Ошибка при обработке сообщения AI:', error.message)
-        await sendMessageToChat(myGroup, message.message, ctx)
-      }
-    }
-
-    client.addEventHandler(
-      handler,
-      new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    )
-
-    currentHandlers.push({
-      handler,
-      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    })
-  }
-
-  if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями с обработкой AI.')
-
-  return (ctx) => {
-    currentHandlers.forEach(({ handler, event }) => {
-      client.removeEventHandler(handler, event)
-    })
-
-    console.log('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
-    if (ctx) {
-      ctx.reply('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
     }
   }
 }
