@@ -15,11 +15,15 @@ const __dirname = path.dirname(__filename)
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
+// --- Вспомогательные функции ---
+
 // Функция для проверки доступа к чату
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
+    console.log(`Использование кэша для чата: ${chatId}`)
     return chatAccessCache.get(chatId)
   }
+
   try {
     const chat = await client.getEntity(chatId)
 
@@ -40,6 +44,29 @@ export async function checkChatAccess(chatId) {
   }
 }
 
+// Функция для проверки существования канала/группы
+export async function validateChannelOrGroup(channelId, ctx) {
+  try {
+    const chat = await client.getEntity(channelId)
+
+    if (!foundChannelsCache.has(channelId)) {
+      console.log(`Канал/группа с ID ${channelId} успешно найден.`)
+      foundChannelsCache.add(channelId)
+    }
+
+    return chat
+  } catch (error) {
+    const errorMessage = `Канал или группа с ID ${channelId} не найдены. Пожалуйста, проверьте правильность введённого ID.`
+    console.error(errorMessage)
+
+    if (ctx) ctx.reply(errorMessage)
+
+    return null
+  }
+}
+
+// --- Основные функции для обработки сообщений ---
+
 // Функция для отправки сообщений
 async function sendMessageToChat(chatId, message, ctx) {
   if (!(await checkChatAccess(chatId))) {
@@ -59,57 +86,6 @@ async function sendMessageToChat(chatId, message, ctx) {
   }
 }
 
-// Функция для скачивания и отправки медиа
-export async function downloadAndSendMedia(chatId, message, ctx) {
-  if (!message.message || !message.message.trim()) {
-    const noTextMessage =
-      'Сообщение не содержит текста, медиа не будет отправлено.'
-    console.log(noTextMessage)
-    // Убираем отправку этого сообщения в чат
-    return
-  }
-
-  if (!(await checkChatAccess(chatId))) {
-    const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
-    console.error(accessErrorMessage)
-    if (ctx) ctx.reply(accessErrorMessage)
-    return
-  }
-
-  // Получаем расширение файла на основе MIME-типа медиа
-  const fileExtension = getMediaFileExtension(message.media)
-
-  // Создаем путь для файла с правильным расширением
-  const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
-  console.log(`Скачивание медиа: ${filePath}`)
-
-  // Скачиваем файл с повтором в случае ошибки
-  await retryWithBackoff(() =>
-    client.downloadMedia(message.media, { outputFile: filePath })
-  )
-
-  // Определение типа медиа
-  let mediaType = 'document'
-  if (message.media.photo) mediaType = 'photo'
-  else if (message.media.video) mediaType = 'video'
-  else if (message.media.audio) mediaType = 'audio'
-  else if (message.media.document) {
-    mediaType =
-      message.media.document.mimeType === 'video/mp4' ? 'animation' : 'document'
-  }
-
-  console.log(`Тип медиа из сообщения: ${mediaType}`)
-
-  // Отправляем медиа по типу
-  await sendMediaByType(chatId, message, filePath, mediaType, ctx)
-
-  // Удаляем временный файл после отправки
-  fs.unlink(filePath, (err) => {
-    if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
-    else console.log(`Файл удален: ${filePath}`)
-  })
-}
-
 // Функция для отправки медиа по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
   if (!(await checkChatAccess(chatId))) {
@@ -119,7 +95,6 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
     return
   }
 
-  // Проверка существования файла
   if (!fs.existsSync(mediaPath)) {
     console.error(`Файл не найден: ${mediaPath}`)
     if (ctx) ctx.reply(`Файл не найден: ${mediaPath}`)
@@ -180,87 +155,51 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
   }
 }
 
-// Функция для получения непрочитанных сообщений
-export async function getUnreadMessages(channelId, limit = 1, ctx) {
-  if (!client.connected) await client.connect()
-
-  const chat = await validateChannelOrGroup(channelId, ctx)
-  if (!chat) {
-    return 'Канал или группа не найдены'
+// Функция для скачивания и отправки медиа
+export async function downloadAndSendMedia(chatId, message, ctx) {
+  if (!message.message || !message.message.trim()) {
+    console.log('Сообщение не содержит текста, медиа не будет отправлено.')
+    return
   }
 
-  if (ctx) ctx.reply(`Получены непрочитанные сообщения из канала ${channelId}.`)
-  return await client.getMessages(chat, { limit })
-}
+  if (!(await checkChatAccess(chatId))) {
+    const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
+    console.error(accessErrorMessage)
+    if (ctx) ctx.reply(accessErrorMessage)
+    return
+  }
 
-// Функция для проверки существования канала/группы
-export async function validateChannelOrGroup(channelId, ctx) {
+  const fileExtension = getMediaFileExtension(message.media)
+  const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
+  console.log(`Скачивание медиа: ${filePath}`)
+
   try {
-    const chat = await client.getEntity(channelId)
-
-    if (!foundChannelsCache.has(channelId)) {
-      console.log(`Канал/группа с ID ${channelId} успешно найден.`)
-      foundChannelsCache.add(channelId)
-    }
-
-    return chat
+    await client.downloadMedia(message.media, { outputFile: filePath })
   } catch (error) {
-    const errorMessage = `Канал или группа с ID ${channelId} не найдены. Пожалуйста, проверьте правильность введённого ID.`
-    console.error(errorMessage)
-
-    if (ctx) ctx.reply(errorMessage)
-
-    return null
+    console.error('Ошибка при скачивании медиа:', error.message)
+    if (ctx) ctx.reply('Ошибка при скачивании медиа.')
+    return
   }
+
+  let mediaType = 'document'
+  if (message.media.photo) mediaType = 'photo'
+  else if (message.media.video) mediaType = 'video'
+  else if (message.media.audio) mediaType = 'audio'
+  else if (message.media.document) {
+    mediaType =
+      message.media.document.mimeType === 'video/mp4' ? 'animation' : 'document'
+  }
+
+  console.log(`Тип медиа из сообщения: ${mediaType}`)
+  await sendMediaByType(chatId, message, filePath, mediaType, ctx)
+
+  fs.unlink(filePath, (err) => {
+    if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
+    else console.log(`Файл удален: ${filePath}`)
+  })
 }
 
-// Функция для наблюдения за новыми сообщениями
-export async function watchNewMessages(channelIds, ctx) {
-  if (!client.connected) await client.connect()
-
-  const currentHandlers = []
-
-  for (const channelId of channelIds) {
-    const chat = await validateChannelOrGroup(channelId, ctx)
-    if (!chat) {
-      continue
-    }
-
-    const handler = async (event) => {
-      try {
-        const message = event.message
-        if (message.media) {
-          await downloadAndSendMedia(myGroup, message, ctx)
-        } else {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, message.message, ctx)
-        }
-      } catch (error) {
-        console.error('Ошибка при обработке нового сообщения:', error.message)
-        if (ctx) ctx.reply('Ошибка при обработке нового сообщения.')
-      }
-    }
-
-    client.addEventHandler(
-      handler,
-      new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    )
-    currentHandlers.push({
-      handler,
-      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    })
-  }
-
-  if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями.')
-
-  return (ctx) => {
-    currentHandlers.forEach(({ handler, event }) => {
-      client.removeEventHandler(handler, event)
-    })
-    console.log('Прекращено наблюдение за новыми сообщениями.')
-    if (ctx) ctx.reply('Прекращено наблюдение за новыми сообщениями.')
-  }
-}
+// --- Функции для работы с AI ---
 
 // Функция для проверки наличия сообщения с ошибкой ИИ
 function containsAiErrorMessage(response) {
@@ -314,6 +253,56 @@ async function processMessageWithAi(message) {
   } catch (error) {
     console.error('Ошибка при запросе к ИИ:', error.message)
     return message.message
+  }
+}
+
+// --- Функции для мониторинга сообщений ---
+
+// Функция для наблюдения за новыми сообщениями
+export async function watchNewMessages(channelIds, ctx) {
+  if (!client.connected) await client.connect()
+
+  const currentHandlers = []
+
+  for (const channelId of channelIds) {
+    const chat = await validateChannelOrGroup(channelId, ctx)
+    if (!chat) {
+      continue
+    }
+
+    const handler = async (event) => {
+      try {
+        const message = event.message
+        if (message.media) {
+          await downloadAndSendMedia(myGroup, message, ctx)
+        } else {
+          console.log('Медиа не найдено, отправка текстового сообщения')
+          await sendMessageToChat(myGroup, message.message, ctx)
+        }
+      } catch (error) {
+        console.error('Ошибка при обработке нового сообщения:', error.message)
+        if (ctx) ctx.reply('Ошибка при обработке нового сообщения.')
+      }
+    }
+
+    client.addEventHandler(
+      handler,
+      new NewMessage({ chats: [parseInt(channelId) || channelId] })
+    )
+    currentHandlers.push({
+      handler,
+      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
+    })
+  }
+
+  if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями.')
+
+  return (ctx) => {
+    currentHandlers.forEach(({ handler, event }) => {
+      client.removeEventHandler(handler, event)
+    })
+    console.log('Прекращено наблюдение за новыми сообщениями.')
+    if (ctx) ctx.reply('Прекращено наблюдение за новыми сообщениями.')
   }
 }
 
@@ -385,4 +374,17 @@ export async function watchNewMessagesAi(channelIds, ctx) {
       ctx.reply('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
     }
   }
+}
+
+// Функция для получения непрочитанных сообщений
+export async function getUnreadMessages(channelId, limit = 1, ctx) {
+  if (!client.connected) await client.connect()
+
+  const chat = await validateChannelOrGroup(channelId, ctx)
+  if (!chat) {
+    return 'Канал или группа не найдены'
+  }
+
+  if (ctx) ctx.reply(`Получены непрочитанные сообщения из канала ${channelId}.`)
+  return await client.getMessages(chat, { limit })
 }
