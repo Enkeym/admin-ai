@@ -170,6 +170,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   }
 
   const fileExtension = getMediaFileExtension(message.media)
+
+  if (fileExtension === 'bin') {
+    console.log('Неизвестный формат файла (bin), медиа пропущено.')
+    return
+  }
+
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
   console.log(`Скачивание медиа: ${filePath}`)
 
