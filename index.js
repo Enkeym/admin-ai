@@ -2,18 +2,47 @@ import { bot } from './bot.js'
 import { client } from './telegramClient.js'
 import { myGroup } from './config.js'
 import { checkChatAccess } from './mediaHandler.js'
+
+// Функция для безопасного подключения с повторными попытками
+async function safeConnect(client, retries = 5, delay = 5000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (!client.connected) {
+        await client.connect()
+        console.log('Telegram client connected.')
+        return
+      }
+    } catch (error) {
+      if (error.code === -500 && attempt < retries) {
+        console.log(
+          `Attempt ${attempt} failed. Retrying in ${delay / 1000} seconds...`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      } else {
+        throw error
+      }
+    }
+  }
+  throw new Error('Unable to connect to Telegram after multiple attempts')
+}
+
 ;(async function run() {
   try {
-    if (!client.connected) {
-      await client.connect()
-      console.log('Telegram client connected.')
-    }
+    await safeConnect(client)
 
     // Проверка доступа к основному чату при инициализации
     await checkChatAccess(myGroup)
 
     await bot.launch()
     console.log('Bot launched.')
+
+    // Периодическая проверка соединения и переподключение
+    setInterval(async () => {
+      if (!client.connected) {
+        console.log('Reconnecting to Telegram...')
+        await safeConnect(client)
+      }
+    }, 60000) // Каждую минуту проверяем соединение
 
     const gracefulShutdown = async (signal) => {
       try {
