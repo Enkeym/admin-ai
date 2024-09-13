@@ -55,8 +55,13 @@ async function getToken() {
   }
 }
 
-// Функция для взаимодействия с GigaChat API
-async function giga(content = '', system = '') {
+// Вспомогательная функция для задержки
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Функция для взаимодействия с GigaChat API с обработкой ошибки 429
+async function giga(content = '', system = '', retryCount = 3) {
   try {
     let token = await getToken()
 
@@ -102,7 +107,13 @@ async function giga(content = '', system = '') {
       throw new Error('Не удалось получить корректный ответ от GigaChat API')
     }
   } catch (error) {
-    if (error.response && error.response.status === 401) {
+    if (error.response && error.response.status === 429 && retryCount > 0) {
+      console.log(
+        'Слишком много запросов. Ожидание перед повторной попыткой...'
+      )
+      await delay(5000)
+      return await giga(content, system, retryCount - 1)
+    } else if (error.response && error.response.status === 401) {
       console.log('Токен истек, получаем новый токен...')
       cachedToken = null
       try {
@@ -127,7 +138,6 @@ async function giga(content = '', system = '') {
 
 // Функция для проверки наличия рекламы в тексте
 async function checkForAds(text) {
-  // Проверяем наличие явных ссылок в сообщении
   const urlPattern = /https?:\/\/[^\s]+/g
   if (urlPattern.test(text)) {
     console.log('Обнаружена ссылка, сообщение классифицировано как реклама.')
