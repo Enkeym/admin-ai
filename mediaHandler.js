@@ -15,6 +15,9 @@ const __dirname = path.dirname(__filename)
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
+// Максимальный размер файла для Telegram (50 МБ)
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+
 // --- Вспомогательные функции ---
 
 // Функция для проверки доступа к чату
@@ -63,6 +66,12 @@ export async function validateChannelOrGroup(channelId, ctx) {
 
     return null
   }
+}
+
+// Функция для проверки размера файла
+function isFileSizeAcceptable(filePath) {
+  const stats = fs.statSync(filePath)
+  return stats.size <= MAX_FILE_SIZE
 }
 
 // --- Основные функции для обработки сообщений ---
@@ -181,24 +190,41 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
   try {
     await client.downloadMedia(message.media, { outputFile: filePath })
+
+    if (message.media.video && fileExtension !== 'mp4') {
+      console.log('Неподдерживаемый формат видео, отправка невозможна.')
+      if (ctx)
+        ctx.reply('Неподдерживаемый формат видео. Пожалуйста, используйте mp4.')
+      return
+    }
+
+    // Проверка размера файла
+    if (!isFileSizeAcceptable(filePath)) {
+      console.log('Размер файла превышает допустимый лимит.')
+      if (ctx) ctx.reply('Размер файла превышает допустимый лимит (50 МБ).')
+      return
+    }
+
+    let mediaType = 'document'
+    if (message.media.photo) mediaType = 'photo'
+    else if (message.media.video) mediaType = 'video'
+    else if (message.media.audio) mediaType = 'audio'
+    else if (message.media.document) {
+      mediaType =
+        message.media.document.mimeType === 'video/mp4'
+          ? 'animation'
+          : 'document'
+    }
+
+    console.log(`Тип медиа из сообщения: ${mediaType}`)
+    await sendMediaByType(chatId, message, filePath, mediaType, ctx)
   } catch (error) {
     console.error('Ошибка при скачивании медиа:', error.message)
     if (ctx) ctx.reply('Ошибка при скачивании медиа.')
     return
   }
 
-  let mediaType = 'document'
-  if (message.media.photo) mediaType = 'photo'
-  else if (message.media.video) mediaType = 'video'
-  else if (message.media.audio) mediaType = 'audio'
-  else if (message.media.document) {
-    mediaType =
-      message.media.document.mimeType === 'video/mp4' ? 'animation' : 'document'
-  }
-
-  console.log(`Тип медиа из сообщения: ${mediaType}`)
-  await sendMediaByType(chatId, message, filePath, mediaType, ctx)
-
+  // Удаляем временные файлы
   fs.unlink(filePath, (err) => {
     if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
     else console.log(`Файл удален: ${filePath}`)

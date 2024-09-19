@@ -3,101 +3,77 @@ export function getMediaFileExtension(media) {
   if (media.photo) return 'jpg'
   if (media.video) return 'mp4'
   if (media.audio) return 'mp3'
-  if (media.document) {
+
+  if (media.document && media.document.mimeType) {
     const mimeType = media.document.mimeType
-    switch (mimeType) {
-      case 'image/jpeg':
-        return 'jpg'
-      case 'image/png':
-        return 'png'
-      case 'image/gif':
-        return 'gif'
-      case 'image/bmp':
-        return 'bmp'
-      case 'image/webp':
-        return 'webp'
-      case 'image/svg+xml':
-        return 'svg'
-      case 'image/tiff':
-        return 'tiff'
+
+    const mimeToExtensionMap = {
+      // Изображения
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/bmp': 'bmp',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/tiff': 'tiff',
 
       // Видео
-      case 'video/mp4':
-        return 'mp4'
-      case 'video/x-msvideo':
-        return 'avi'
-      case 'video/mpeg':
-        return 'mpeg'
-      case 'video/webm':
-        return 'webm'
-      case 'video/quicktime':
-        return 'mov'
-      case 'video/x-matroska':
-        return 'mkv'
-      case 'video/x-flv':
-        return 'flv'
+      'video/mp4': 'mp4',
+      'video/x-msvideo': 'avi',
+      'video/mpeg': 'mpeg',
+      'video/webm': 'webm',
+      'video/quicktime': 'mov',
+      'video/x-matroska': 'mkv',
+      'video/x-flv': 'flv',
 
       // Аудио
-      case 'audio/mpeg':
-        return 'mp3'
-      case 'audio/x-wav':
-        return 'wav'
-      case 'audio/ogg':
-        return 'ogg'
-      case 'audio/aac':
-        return 'aac'
-      case 'audio/flac':
-        return 'flac'
-      case 'audio/webm':
-        return 'weba'
+      'audio/mpeg': 'mp3',
+      'audio/x-wav': 'wav',
+      'audio/ogg': 'ogg',
+      'audio/aac': 'aac',
+      'audio/flac': 'flac',
+      'audio/webm': 'weba',
 
       // Документы
-      case 'application/pdf':
-        return 'pdf'
-      case 'application/msword':
-        return 'doc'
-      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        return 'docx'
-      case 'application/vnd.ms-excel':
-        return 'xls'
-      case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        return 'xlsx'
-      case 'application/vnd.ms-powerpoint':
-        return 'ppt'
-      case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-        return 'pptx'
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        'docx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        'xlsx',
+      'application/vnd.ms-powerpoint': 'ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+        'pptx',
 
       // Архивы
-      case 'application/zip':
-        return 'zip'
-      case 'application/x-rar-compressed':
-        return 'rar'
-      case 'application/x-7z-compressed':
-        return '7z'
-      case 'application/gzip':
-        return 'gz'
+      'application/zip': 'zip',
+      'application/x-rar-compressed': 'rar',
+      'application/x-7z-compressed': '7z',
+      'application/gzip': 'gz',
 
       // Текстовые файлы
-      case 'text/plain':
-        return 'txt'
-      case 'text/html':
-        return 'html'
-      case 'text/css':
-        return 'css'
-      case 'application/json':
-        return 'json'
-      case 'application/javascript':
-        return 'js'
-      case 'application/xml':
-        return 'xml'
+      'text/plain': 'txt',
+      'text/html': 'html',
+      'text/css': 'css',
+      'application/json': 'json',
+      'application/javascript': 'js',
+      'application/xml': 'xml',
 
       // Прочие форматы
-      case 'application/octet-stream':
-        return 'bin'
-      default:
+      'application/octet-stream': 'bin'
+    }
+
+    // Возвращаем расширение на основе MIME-типа или 'bin' по умолчанию
+    return (
+      mimeToExtensionMap[mimeType] ||
+      (() => {
         console.warn(`Неизвестный MIME-тип: ${mimeType}`)
         return 'bin'
-    }
+      })()
+    )
   }
+
+  console.warn('Не удалось определить MIME-тип для медиа.')
   return 'bin'
 }
