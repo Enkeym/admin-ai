@@ -96,7 +96,14 @@ async function sendMessageToChat(chatId, message, ctx) {
 }
 
 // Функция для отправки медиа по типу
-async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
+async function sendMediaByType(
+  chatId,
+  message,
+  mediaPath,
+  mediaType,
+  params,
+  ctx
+) {
   if (!(await checkChatAccess(chatId))) {
     const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     console.error(accessErrorMessage)
@@ -114,39 +121,19 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
     console.log(`Попытка отправки медиа в чат ${chatId}`)
     switch (mediaType) {
       case 'photo':
-        await bot.telegram.sendPhoto(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
+        await bot.telegram.sendPhoto(chatId, { source: mediaPath }, params)
         break
       case 'video':
-        await bot.telegram.sendVideo(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
+        await bot.telegram.sendVideo(chatId, { source: mediaPath }, params)
         break
       case 'document':
-        await bot.telegram.sendDocument(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
+        await bot.telegram.sendDocument(chatId, { source: mediaPath }, params)
         break
       case 'animation':
-        await bot.telegram.sendAnimation(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
+        await bot.telegram.sendAnimation(chatId, { source: mediaPath }, params)
         break
       default:
-        await bot.telegram.sendDocument(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
+        await bot.telegram.sendDocument(chatId, { source: mediaPath }, params)
     }
     console.log('Медиа успешно отправлено.')
   } catch (error) {
@@ -206,18 +193,33 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     }
 
     let mediaType = 'document'
-    if (message.media.photo) mediaType = 'photo'
-    else if (message.media.video) mediaType = 'video'
-    else if (message.media.audio) mediaType = 'audio'
-    else if (message.media.document) {
-      mediaType =
-        message.media.document.mimeType === 'video/mp4'
-          ? 'animation'
-          : 'document'
+    let params = { caption: message.message }
+
+    // Определение типа медиа и извлечение параметров
+    if (message.media.video) {
+      mediaType = 'video'
+      const {
+        duration,
+        w: width,
+        h: height
+      } = message.media.document.attributes.find(
+        (attr) => attr.className === 'DocumentAttributeVideo'
+      )
+      params = {
+        caption: message.message,
+        duration,
+        width,
+        height,
+        supports_streaming: true
+      }
+    } else if (message.media.photo) {
+      mediaType = 'photo'
+    } else if (message.media.document) {
+      mediaType = 'document'
     }
 
     console.log(`Тип медиа из сообщения: ${mediaType}`)
-    await sendMediaByType(chatId, message, filePath, mediaType, ctx)
+    await sendMediaByType(chatId, message, filePath, mediaType, params)
   } catch (error) {
     console.error('Ошибка при скачивании медиа:', error.message)
     if (ctx) ctx.reply('Ошибка при скачивании медиа.')
@@ -305,6 +307,7 @@ export async function watchNewMessages(channelIds, ctx) {
     const handler = async (event) => {
       try {
         const message = event.message
+
         if (message.media) {
           await downloadAndSendMedia(myGroup, message, ctx)
         } else {
