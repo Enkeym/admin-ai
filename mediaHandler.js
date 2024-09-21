@@ -119,21 +119,29 @@ async function sendMediaByType(
 
   try {
     console.log(`Попытка отправки медиа в чат ${chatId}`)
-    switch (mediaType) {
-      case 'photo':
-        await bot.telegram.sendPhoto(chatId, { source: mediaPath }, params)
-        break
-      case 'video':
-        await bot.telegram.sendVideo(chatId, { source: mediaPath }, params)
-        break
-      case 'document':
-        await bot.telegram.sendDocument(chatId, { source: mediaPath }, params)
-        break
-      case 'animation':
-        await bot.telegram.sendAnimation(chatId, { source: mediaPath }, params)
-        break
-      default:
-        await bot.telegram.sendDocument(chatId, { source: mediaPath }, params)
+
+    // Используем стриминг видео, если это видеофайл
+    if (mediaType === 'video') {
+      const fileStream = fs.createReadStream(mediaPath)
+      await bot.telegram.sendVideo(chatId, { source: fileStream }, params)
+    } else {
+      switch (mediaType) {
+        case 'photo':
+          await bot.telegram.sendPhoto(chatId, { source: mediaPath }, params)
+          break
+        case 'document':
+          await bot.telegram.sendDocument(chatId, { source: mediaPath }, params)
+          break
+        case 'animation':
+          await bot.telegram.sendAnimation(
+            chatId,
+            { source: mediaPath },
+            params
+          )
+          break
+        default:
+          await bot.telegram.sendDocument(chatId, { source: mediaPath }, params)
+      }
     }
     console.log('Медиа успешно отправлено.')
   } catch (error) {
@@ -176,7 +184,9 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   console.log(`Скачивание медиа: ${filePath}`)
 
   try {
-    await client.downloadMedia(message.media, { outputFile: filePath })
+    // Использование асинхронного стрима для загрузки файла
+    const fileStream = fs.createWriteStream(filePath)
+    await client.downloadMedia(message.media, { outputStream: fileStream })
 
     if (message.media.video && fileExtension !== 'mp4') {
       console.log('Неподдерживаемый формат видео, отправка невозможна.')
@@ -205,6 +215,15 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       } = message.media.document.attributes.find(
         (attr) => attr.className === 'DocumentAttributeVideo'
       )
+
+      // Добавление миниатюры для видео
+      const thumbnail = message.media.document.thumbs?.find(
+        (thumb) => thumb.className === 'PhotoSize'
+      )
+      if (thumbnail) {
+        params.thumb = { source: thumbnail }
+      }
+
       params = {
         caption: message.message,
         duration,
