@@ -139,10 +139,10 @@ async function sendMessageOrMedia(
   }
 }
 
-// Функция для преобразования видео через FFmpeg с правильным соотношением сторон
-async function convertVideo(inputPath, outputPath, width, height) {
+// Функция для преобразования видео через FFmpeg с использованием кодеков H.264 и AAC
+async function convertVideo(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
-    const command = `ffmpeg -i "${inputPath}" -vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -movflags +faststart -c:a aac "${outputPath}"`
+    const command = `ffmpeg -i "${inputPath}" -vcodec h264 -acodec aac -strict -2 -movflags +faststart "${outputPath}"`
 
     exec(command, (error) => {
       if (error) {
@@ -182,49 +182,83 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
+  // Логирование MIME-типа
+  const mimeType = message.media?.document?.mimeType
+  console.log(`MIME-тип медиа: ${mimeType}`)
+
   let mediaType = 'document'
   if (message.media.photo) {
     mediaType = 'photo'
-  } else if (message.media.video) {
+  } else if (
+    message.media.document?.mimeType === 'video/mp4' ||
+    mimeType === 'video/quicktime'
+  ) {
     mediaType = 'video'
-  } else if (message.media.document?.mimeType === 'video/mp4') {
+  } else if (message.media.document?.mimeType === 'image/gif') {
     mediaType = 'animation'
   }
 
   let convertedVideoPath = null
 
   if (mediaType === 'video') {
-    convertedVideoPath = path.resolve(__dirname, `converted_${message.id}.mp4`)
+    const videoAttributes = message.media.document.attributes.find(
+      (attr) => attr.className === 'DocumentAttributeVideo'
+    )
+    const width = videoAttributes?.w || 720
+    const height = videoAttributes?.h || 1080
 
-    const width = 720 // Например, для вертикального видео
-    const height = 1080 // Пример для вертикального видео
+    console.log(`Получены размеры видео: ширина ${width}, высота ${height}`)
 
-    try {
-      await convertVideo(filePath, convertedVideoPath, width, height)
+    // Проверка, нужно ли конвертировать видео в MP4
+    if (mimeType === 'video/quicktime') {
+      console.log('Видео в формате QuickTime, требуется конвертация в MP4.')
+      convertedVideoPath = path.resolve(
+        __dirname,
+        `converted_${message.id}.mp4`
+      )
 
-      // Обновлённая отправка видео с явным указанием ширины и высоты
+      try {
+        await convertVideo(filePath, convertedVideoPath, width, height)
+
+        // Отправляем конвертированное видео
+        await bot.telegram.sendVideo(
+          chatId,
+          { source: convertedVideoPath },
+          {
+            supports_streaming: true,
+            caption: message.message,
+            width: width,
+            height: height
+          }
+        )
+
+        console.log('Видео успешно отправлено после конвертации.')
+      } catch (error) {
+        console.error('Ошибка преобразования видео:', error.message)
+        if (ctx) await ctx.reply('Ошибка преобразования видео.')
+      }
+    } else {
+      // Если формат уже MP4, отправляем оригинал
+      console.log('Видео уже в формате MP4, отправляем оригинал.')
+
       await bot.telegram.sendVideo(
         chatId,
-        { source: convertedVideoPath },
+        { source: filePath },
         {
           supports_streaming: true,
           caption: message.message,
-          width: width, // Явно передаём ширину
-          height: height // Явно передаём высоту
+          width: width,
+          height: height
         }
       )
-
-      console.log('Видео успешно отправлено.')
-    } catch (error) {
-      console.error('Ошибка преобразования видео:', error.message)
-      if (ctx) await ctx.reply('Ошибка преобразования видео.')
     }
   } else {
     await sendMessageOrMedia(chatId, message, filePath, mediaType, ctx)
   }
 
+  // Удаление исходного и конвертированного видео после отправки
   deleteFile(filePath)
-  deleteFile(convertedVideoPath)
+  if (convertedVideoPath) deleteFile(convertedVideoPath)
 }
 
 // Асинхронная отправка текстовых сообщений
