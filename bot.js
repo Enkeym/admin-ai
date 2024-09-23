@@ -21,6 +21,7 @@ bot.command('watch', async (ctx) => {
     await notifyProcessStopped(ctx)
   }
   const args = ctx.message.text.split(' ').slice(1)
+
   if (args.length > 0) {
     const chat = await validateChannelOrGroup(args[0], ctx)
     if (!chat) return
