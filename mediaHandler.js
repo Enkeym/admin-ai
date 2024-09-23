@@ -18,7 +18,6 @@ const foundChannelsCache = new Set()
 
 // --- Вспомогательные функции ---
 
-// Функция для проверки доступа к чату
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
     console.log(`Использование кэша для чата: ${chatId}`)
@@ -45,7 +44,6 @@ export async function checkChatAccess(chatId) {
   }
 }
 
-// Функция для проверки существования канала/группы
 export async function validateChannelOrGroup(channelId, ctx) {
   try {
     const chat = await client.getEntity(channelId)
@@ -66,7 +64,6 @@ export async function validateChannelOrGroup(channelId, ctx) {
   }
 }
 
-// Универсальная функция для удаления файлов
 function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
     fs.unlink(filePath, (err) => {
@@ -81,7 +78,6 @@ function deleteFile(filePath) {
 
 // --- Основные функции для обработки сообщений ---
 
-// Универсальная функция для отправки сообщений или медиа
 async function sendMessageOrMedia(
   chatId,
   message,
@@ -134,7 +130,6 @@ async function sendMessageOrMedia(
 
       console.log('Медиа успешно отправлено.')
     } else {
-      // Отправка текстового сообщения
       await bot.telegram.sendMessage(chatId, message.message)
       console.log('Сообщение успешно отправлено.')
     }
@@ -144,7 +139,7 @@ async function sendMessageOrMedia(
   }
 }
 
-// Функция для преобразования видео через FFmpeg с сохранением пропорций
+// Функция для преобразования видео через FFmpeg с правильным соотношением сторон
 async function convertVideo(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
     const command = `ffmpeg -i "${inputPath}" -vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -movflags +faststart -c:a aac "${outputPath}"`
@@ -200,30 +195,34 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
   if (mediaType === 'video') {
     convertedVideoPath = path.resolve(__dirname, `converted_${message.id}.mp4`)
-    const width = 720 // Ширина видео
-    const height = 1080 // Высота видео
+
+    const width = 720 // Например, для вертикального видео
+    const height = 1080 // Пример для вертикального видео
 
     try {
       await convertVideo(filePath, convertedVideoPath, width, height)
 
-      // Отправляем видео
-      await sendMessageOrMedia(
+      // Обновлённая отправка видео с явным указанием ширины и высоты
+      await bot.telegram.sendVideo(
         chatId,
-        message,
-        convertedVideoPath,
-        mediaType,
-        ctx
+        { source: convertedVideoPath },
+        {
+          supports_streaming: true,
+          caption: message.message,
+          width: width, // Явно передаём ширину
+          height: height // Явно передаём высоту
+        }
       )
+
+      console.log('Видео успешно отправлено.')
     } catch (error) {
       console.error('Ошибка преобразования видео:', error.message)
       if (ctx) await ctx.reply('Ошибка преобразования видео.')
     }
   } else {
-    // Отправляем без преобразования для других типов медиа
     await sendMessageOrMedia(chatId, message, filePath, mediaType, ctx)
   }
 
-  // Удаляем скачанный медиа-файл и, если есть, конвертированное видео
   deleteFile(filePath)
   deleteFile(convertedVideoPath)
 }
