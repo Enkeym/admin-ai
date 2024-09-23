@@ -91,7 +91,7 @@ async function sendMessageToChat(chatId, message, ctx) {
 async function convertVideo(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
     const command = `ffmpeg -i ${inputPath} -vf "scale=${width}:${height},setsar=1" -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -c:a aac ${outputPath}`
-    exec(command, (error, stdout, stderr) => {
+    exec(command, (error, stdout) => {
       if (error) {
         console.error(`Ошибка преобразования видео: ${error.message}`)
         return reject(error)
