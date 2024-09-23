@@ -11,67 +11,69 @@ import {
 export const bot = new Telegraf(tgToken)
 let currentProcess = null
 
+// Уведомление о завершении процесса
 async function notifyProcessStopped(ctx) {
   await ctx.reply('Процесс был остановлен.')
 }
 
+// Команда для наблюдения за новыми сообщениями
 bot.command('watch', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1)
+  if (args.length === 0) {
+    return ctx.reply('Вы не указали ID каналов/групп')
+  }
+
+  const chat = await validateChannelOrGroup(args[0], ctx)
+  if (!chat) return // Если ID неправильный, ничего не делаем
+
+  // Если ID корректный, останавливаем текущий процесс
   if (currentProcess) {
-    currentProcess()
+    await currentProcess() // Остановка текущего процесса
     await notifyProcessStopped(ctx)
   }
-  const args = ctx.message.text.split(' ').slice(1)
 
-  if (args.length > 0) {
-    const chat = await validateChannelOrGroup(args[0], ctx)
-    if (!chat) return
-
-    try {
-      currentProcess = await watchNewMessages(args, ctx)
-      ctx.reply(
-        `Наблюдение за новыми сообщениями из каналов/групп: ${args.join(', ')}`
-      )
-    } catch (error) {
-      console.error('Ошибка в процессе /watch:', error)
-      await notifyProcessStopped(ctx)
-    }
-  } else {
-    ctx.reply('Вы не указали ID каналов/групп')
+  try {
+    currentProcess = await watchNewMessages(args, ctx)
+    ctx.reply(
+      `Наблюдение за новыми сообщениями из каналов/групп: ${args.join(', ')}`
+    )
+  } catch (error) {
+    console.error('Ошибка в процессе /watch:', error)
+    await notifyProcessStopped(ctx)
   }
 })
 
+// Команда для наблюдения за новыми сообщениями с обработкой AI
 bot.command('watchAi', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1)
+  if (args.length === 0) {
+    return ctx.reply('Вы не указали ID каналов/групп')
+  }
+
+  const chat = await validateChannelOrGroup(args[0], ctx)
+  if (!chat) return // Если ID неправильный, ничего не делаем
+
+  // Если ID корректный, останавливаем текущий процесс
   if (currentProcess) {
-    currentProcess()
+    await currentProcess() // Остановка текущего процесса
     await notifyProcessStopped(ctx)
   }
-  const args = ctx.message.text.split(' ').slice(1)
 
-  if (args.length > 0) {
-    const chat = await validateChannelOrGroup(args[0], ctx)
-    if (!chat) return
-
-    try {
-      currentProcess = await watchNewMessagesAi(args, ctx)
-      ctx.reply(
-        `Наблюдение с обработкой AI за новыми сообщениями из каналов/групп: ${args.join(
-          ', '
-        )}`
-      )
-    } catch (error) {
-      console.error('Ошибка в процессе /watchAi:', error)
-      await notifyProcessStopped(ctx)
-    }
-  } else {
-    ctx.reply('Вы не указали ID каналов/групп')
+  try {
+    currentProcess = await watchNewMessagesAi(args, ctx)
+    ctx.reply(
+      `Наблюдение с обработкой AI за новыми сообщениями из каналов/групп: ${args.join(
+        ', '
+      )}`
+    )
+  } catch (error) {
+    console.error('Ошибка в процессе /watchAi:', error)
+    await notifyProcessStopped(ctx)
   }
 })
 
+// Команда для получения непрочитанных сообщений
 bot.command('sum', async (ctx) => {
-  if (currentProcess) {
-    currentProcess()
-    await notifyProcessStopped(ctx)
-  }
   const args = ctx.message.text.split(' ')
   const channelId = args[1]
   const count = parseInt(args[2], 10) || 1
@@ -80,7 +82,13 @@ bot.command('sum', async (ctx) => {
   if (!channelId) return ctx.reply('Вы не указали ID канала')
 
   const chat = await validateChannelOrGroup(channelId, ctx)
-  if (!chat) return
+  if (!chat) return // Если ID неправильный, ничего не делаем
+
+  // Если ID корректный, останавливаем текущий процесс
+  if (currentProcess) {
+    await currentProcess() // Остановка текущего процесса
+    await notifyProcessStopped(ctx)
+  }
 
   try {
     let messages = await getUnreadMessages(channelId, count, ctx)
@@ -111,6 +119,7 @@ bot.command('sum', async (ctx) => {
   }
 })
 
+// Приветственное сообщение бота
 bot.command('start', (ctx) => {
   const startMessage = `
 Привет! Я бот, который может выполнять следующие действия:
@@ -125,6 +134,7 @@ bot.command('start', (ctx) => {
   ctx.reply(startMessage)
 })
 
+// Команда для остановки текущего процесса
 bot.command('stop', (ctx) => {
   if (currentProcess) {
     currentProcess()
@@ -132,6 +142,18 @@ bot.command('stop', (ctx) => {
     ctx.reply('Текущий процесс остановлен.')
   } else {
     ctx.reply('Нет активного процесса наблюдения.')
+  }
+})
+
+// Обработка неизвестных команд
+bot.on('text', (ctx) => {
+  const messageText = ctx.message.text
+
+  // Проверяем, если сообщение начинается с "/" и оно не было обработано ранее
+  if (messageText.startsWith('/')) {
+    ctx.reply(
+      `Команда "${messageText}" не распознана. Пожалуйста, используйте /start для просмотра доступных команд.`
+    )
   }
 })
 

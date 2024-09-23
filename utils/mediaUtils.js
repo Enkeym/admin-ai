@@ -58,22 +58,15 @@ export function getMediaFileExtension(media) {
       'text/css': 'css',
       'application/json': 'json',
       'application/javascript': 'js',
-      'application/xml': 'xml',
-
-      // Прочие форматы
-      'application/octet-stream': 'bin'
+      'application/xml': 'xml'
     }
 
-    // Возвращаем расширение на основе MIME-типа или 'bin' по умолчанию
-    return (
-      mimeToExtensionMap[mimeType] ||
-      (() => {
-        console.warn(`Неизвестный MIME-тип: ${mimeType}`)
-        return 'bin'
-      })()
-    )
+    // Возвращаем расширение на основе MIME-типа или 'document' по умолчанию
+    return mimeToExtensionMap[mimeType] || 'document'
   }
 
-  console.warn('Не удалось определить MIME-тип для медиа.')
-  return 'bin'
+  console.warn(
+    'Не удалось определить MIME-тип для медиа. Возвращаем "document".'
+  )
+  return 'document'
 }

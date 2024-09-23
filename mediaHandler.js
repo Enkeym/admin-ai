@@ -66,121 +66,103 @@ export async function validateChannelOrGroup(channelId, ctx) {
   }
 }
 
+// Универсальная функция для удаления файлов
+function deleteFile(filePath) {
+  if (filePath && fs.existsSync(filePath)) {
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error(`Не удалось удалить файл: ${filePath}`, err)
+      } else {
+        console.log(`Файл удален: ${filePath}`)
+      }
+    })
+  }
+}
+
 // --- Основные функции для обработки сообщений ---
 
-// Функция для отправки сообщений
-async function sendMessageToChat(chatId, message, ctx) {
+// Универсальная функция для отправки сообщений или медиа
+async function sendMessageOrMedia(
+  chatId,
+  message,
+  mediaPath = null,
+  mediaType = null,
+  ctx
+) {
   if (!(await checkChatAccess(chatId))) {
-    const errorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Сообщение не отправлено.`
+    const errorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Сообщение/медиа не отправлено.`
     console.error(errorMessage)
-    if (ctx) ctx.reply(errorMessage)
+    if (ctx) await ctx.reply(errorMessage)
     return
   }
 
   try {
-    console.log(`Попытка отправки сообщения в чат ${chatId}`)
-    await bot.telegram.sendMessage(chatId, message)
-    console.log('Сообщение успешно отправлено в чат.')
-  } catch (error) {
-    console.error('Ошибка при отправке сообщения:', error.message)
-    if (ctx) ctx.reply('Ошибка при отправке сообщения.')
-  }
-}
+    console.log(`Попытка отправки сообщения или медиа в чат ${chatId}`)
 
-// Функция для преобразования видео через FFmpeg
-async function convertVideo(inputPath, outputPath, width, height) {
-  return new Promise((resolve, reject) => {
-    const command = `ffmpeg -i ${inputPath} -vf "scale=${width}:${height},setsar=1" -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -c:a aac ${outputPath}`
-    exec(command, (error, stdout) => {
-      if (error) {
-        console.error(`Ошибка преобразования видео: ${error.message}`)
-        return reject(error)
-      }
-      console.log(`Видео успешно преобразовано: ${stdout}`)
-      resolve(outputPath)
-    })
-  })
-}
+    if (mediaPath && fs.existsSync(mediaPath)) {
+      const mediaOptions = { caption: message.message }
 
-// Функция для отправки видео по типу
-async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
-  if (!(await checkChatAccess(chatId))) {
-    const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
-    console.error(accessErrorMessage)
-    if (ctx) ctx.reply(accessErrorMessage)
-    return
-  }
-
-  if (!fs.existsSync(mediaPath)) {
-    console.error(`Файл не найден: ${mediaPath}`)
-    if (ctx) ctx.reply(`Файл не найден: ${mediaPath}`)
-    return
-  }
-
-  try {
-    console.log(`Попытка отправки медиа в чат ${chatId}`)
-    if (mediaType === 'video') {
-      const convertedVideoPath = path.resolve(
-        __dirname,
-        `converted_${path.basename(mediaPath)}`
-      )
-      const width = 720
-      const height = 1080
-      await convertVideo(mediaPath, convertedVideoPath, width, height)
-
-      await bot.telegram.sendVideo(
-        chatId,
-        { source: convertedVideoPath },
-        {
-          caption: message.message,
-          supports_streaming: true,
-          width: width,
-          height: height
-        }
-      )
-
-      fs.unlinkSync(convertedVideoPath)
-    } else {
       switch (mediaType) {
+        case 'video':
+          await bot.telegram.sendVideo(
+            chatId,
+            { source: mediaPath },
+            mediaOptions
+          )
+          break
         case 'photo':
           await bot.telegram.sendPhoto(
             chatId,
             { source: mediaPath },
-            { caption: message.message }
-          )
-          break
-        case 'document':
-          await bot.telegram.sendDocument(
-            chatId,
-            { source: mediaPath },
-            { caption: message.message }
+            mediaOptions
           )
           break
         case 'animation':
           await bot.telegram.sendAnimation(
             chatId,
             { source: mediaPath },
-            { caption: message.message }
+            mediaOptions
           )
           break
         default:
           await bot.telegram.sendDocument(
             chatId,
             { source: mediaPath },
-            { caption: message.message }
+            mediaOptions
           )
       }
+
+      console.log('Медиа успешно отправлено.')
+    } else {
+      // Отправка текстового сообщения
+      await bot.telegram.sendMessage(chatId, message.message)
+      console.log('Сообщение успешно отправлено.')
     }
-    console.log('Медиа успешно отправлено.')
   } catch (error) {
-    console.error('Ошибка при отправке медиа:', error.message)
-    if (ctx) ctx.reply('Ошибка при отправке медиа.')
+    console.error('Ошибка при отправке:', error.message)
+    if (ctx) await ctx.reply('Ошибка при отправке сообщения/медиа.')
   }
 }
 
-// Функция для скачивания и отправки медиа
+// Функция для преобразования видео через FFmpeg с сохранением пропорций
+async function convertVideo(inputPath, outputPath, width, height) {
+  return new Promise((resolve, reject) => {
+    const command = `ffmpeg -i "${inputPath}" -vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -movflags +faststart -c:a aac "${outputPath}"`
+
+    exec(command, (error) => {
+      if (error) {
+        console.error(`Ошибка преобразования видео: ${error.message}`)
+        return reject(error)
+      }
+      console.log(`Видео успешно преобразовано: ${outputPath}`)
+      resolve(outputPath)
+    })
+  })
+}
+
+// Асинхронная обработка загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
-  if (!message.message || !message.message.trim()) {
+  if (!message.message?.trim()) {
     console.log('Сообщение не содержит текста, медиа не будет отправлено.')
     return
   }
@@ -188,44 +170,67 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!(await checkChatAccess(chatId))) {
     const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     console.error(accessErrorMessage)
-    if (ctx) ctx.reply(accessErrorMessage)
+    if (ctx) await ctx.reply(accessErrorMessage)
     return
   }
 
   const fileExtension = getMediaFileExtension(message.media)
-
-  if (fileExtension === 'bin') {
-    console.log('Неизвестный формат файла (bin), медиа пропущено.')
-    return
-  }
-
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
+
   console.log(`Скачивание медиа: ${filePath}`)
 
   try {
     await client.downloadMedia(message.media, { outputFile: filePath })
   } catch (error) {
     console.error('Ошибка при скачивании медиа:', error.message)
-    if (ctx) ctx.reply('Ошибка при скачивании медиа.')
+    if (ctx) await ctx.reply('Ошибка при скачивании медиа.')
     return
   }
 
   let mediaType = 'document'
-  if (message.media.photo) mediaType = 'photo'
-  else if (message.media.video) mediaType = 'video'
-  else if (message.media.audio) mediaType = 'audio'
-  else if (message.media.document) {
-    mediaType =
-      message.media.document.mimeType === 'video/mp4' ? 'animation' : 'document'
+  if (message.media.photo) {
+    mediaType = 'photo'
+  } else if (message.media.video) {
+    mediaType = 'video'
+  } else if (message.media.document?.mimeType === 'video/mp4') {
+    mediaType = 'animation'
   }
 
-  console.log(`Тип медиа из сообщения: ${mediaType}`)
-  await sendMediaByType(chatId, message, filePath, mediaType, ctx)
+  let convertedVideoPath = null
 
-  fs.unlink(filePath, (err) => {
-    if (err) console.error(`Не удалось удалить файл: ${filePath}`, err)
-    else console.log(`Файл удален: ${filePath}`)
-  })
+  if (mediaType === 'video') {
+    convertedVideoPath = path.resolve(__dirname, `converted_${message.id}.mp4`)
+    const width = 720 // Ширина видео
+    const height = 1080 // Высота видео
+
+    try {
+      await convertVideo(filePath, convertedVideoPath, width, height)
+
+      // Отправляем видео
+      await sendMessageOrMedia(
+        chatId,
+        message,
+        convertedVideoPath,
+        mediaType,
+        ctx
+      )
+    } catch (error) {
+      console.error('Ошибка преобразования видео:', error.message)
+      if (ctx) await ctx.reply('Ошибка преобразования видео.')
+    }
+  } else {
+    // Отправляем без преобразования для других типов медиа
+    await sendMessageOrMedia(chatId, message, filePath, mediaType, ctx)
+  }
+
+  // Удаляем скачанный медиа-файл и, если есть, конвертированное видео
+  deleteFile(filePath)
+  deleteFile(convertedVideoPath)
+}
+
+// Асинхронная отправка текстовых сообщений
+export async function sendMessageToChat(chatId, message, ctx) {
+  await sendMessageOrMedia(chatId, { message }, null, null, ctx)
 }
 
 // --- Функции для работы с AI ---
