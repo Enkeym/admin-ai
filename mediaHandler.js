@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { exec } from 'child_process'
 import { bot } from './bot.js'
 import { client } from './telegramClient.js'
 import { fileURLToPath } from 'url'
@@ -86,7 +87,22 @@ async function sendMessageToChat(chatId, message, ctx) {
   }
 }
 
-// Функция для отправки медиа по типу
+// Функция для преобразования видео через FFmpeg
+async function convertVideo(inputPath, outputPath, width, height) {
+  return new Promise((resolve, reject) => {
+    const command = `ffmpeg -i ${inputPath} -vf "scale=${width}:${height},setsar=1" -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -c:a aac ${outputPath}`
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Ошибка преобразования видео: ${error.message}`)
+        return reject(error)
+      }
+      console.log(`Видео успешно преобразовано: ${stdout}`)
+      resolve(outputPath)
+    })
+  })
+}
+
+// Функция для отправки видео по типу
 async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
   if (!(await checkChatAccess(chatId))) {
     const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
@@ -103,55 +119,62 @@ async function sendMediaByType(chatId, message, mediaPath, mediaType, ctx) {
 
   try {
     console.log(`Попытка отправки медиа в чат ${chatId}`)
-    switch (mediaType) {
-      case 'photo':
-        await bot.telegram.sendPhoto(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
-        break
-      case 'video':
-        await bot.telegram.sendVideo(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
-        break
-      case 'document':
-        await bot.telegram.sendDocument(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
-        break
-      case 'animation':
-        await bot.telegram.sendAnimation(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
-        break
-      default:
-        await bot.telegram.sendDocument(
-          chatId,
-          { source: mediaPath },
-          { caption: message.message }
-        )
+    if (mediaType === 'video') {
+      const convertedVideoPath = path.resolve(
+        __dirname,
+        `converted_${path.basename(mediaPath)}`
+      )
+      const width = 720
+      const height = 1080
+      await convertVideo(mediaPath, convertedVideoPath, width, height)
+
+      await bot.telegram.sendVideo(
+        chatId,
+        { source: convertedVideoPath },
+        {
+          caption: message.message,
+          supports_streaming: true,
+          width: width,
+          height: height
+        }
+      )
+
+      fs.unlinkSync(convertedVideoPath)
+    } else {
+      switch (mediaType) {
+        case 'photo':
+          await bot.telegram.sendPhoto(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
+          break
+        case 'document':
+          await bot.telegram.sendDocument(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
+          break
+        case 'animation':
+          await bot.telegram.sendAnimation(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
+          break
+        default:
+          await bot.telegram.sendDocument(
+            chatId,
+            { source: mediaPath },
+            { caption: message.message }
+          )
+      }
     }
     console.log('Медиа успешно отправлено.')
   } catch (error) {
-    if (
-      error.response &&
-      (error.response.error_code === 413 || error.response.error_code === 400)
-    ) {
-      console.log(
-        `Пропуск сообщения с ошибкой ${error.response.error_code}: ${error.message}`
-      )
-    } else {
-      console.error('Ошибка при отправке медиа:', error.message)
-      if (ctx) ctx.reply('Ошибка при отправке медиа.')
-    }
+    console.error('Ошибка при отправке медиа:', error.message)
+    if (ctx) ctx.reply('Ошибка при отправке медиа.')
   }
 }
 
