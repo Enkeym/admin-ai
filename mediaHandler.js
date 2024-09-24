@@ -1,13 +1,14 @@
+import { exec } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { exec } from 'child_process'
-import { bot } from './bot.js'
-import { client } from './telegramClient.js'
-import { fileURLToPath } from 'url'
 import { NewMessage } from 'telegram/events/NewMessage.js'
-import { myGroup } from './config.js'
+import { fileURLToPath } from 'url'
 import { checkForAds, requestForAi } from './ai/giga.js'
+import { bot } from './bot.js'
+import { myGroup } from './config.js'
+import { client } from './telegramClient.js'
 import { additionalPatterns, aiErrorMessages } from './utils/aiErrorMessages.js'
+import { logWithTimestamp } from './utils/logWithTimestamp.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -75,12 +76,6 @@ function deleteFile(filePath) {
       }
     })
   }
-}
-
-//Обработка сообщения с временным штампом
-function logWithTimestamp(message) {
-  const now = new Date().toISOString()
-  console.log(`[${now}] ${message}`)
 }
 
 // --- Основные функции для обработки сообщений ---
