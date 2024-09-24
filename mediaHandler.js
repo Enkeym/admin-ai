@@ -8,7 +8,7 @@ import { bot } from './bot.js'
 import { myGroup } from './config.js'
 import { client } from './telegramClient.js'
 import { additionalPatterns, aiErrorMessages } from './utils/aiErrorMessages.js'
-import { logWithTimestamp } from './utils/logWithTimestamp.js'
+import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
 
 const __filename = fileURLToPath(import.meta.url)
