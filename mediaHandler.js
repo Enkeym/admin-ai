@@ -162,6 +162,14 @@ async function convertVideo(inputPath, outputPath) {
   })
 }
 
+// Функция для проверки размера файла
+function isFileTooLarge(filePath, maxSizeMB) {
+  const stats = fs.statSync(filePath)
+  const fileSizeInBytes = stats.size
+  const fileSizeInMB = fileSizeInBytes / (1024 * 1024)
+  return fileSizeInMB > maxSizeMB
+}
+
 // Асинхронная обработка загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message.message?.trim()) {
@@ -197,6 +205,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   const fileSizeInBytes = message.media.document.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
   logWithTimestamp(`Размер видео: ${fileSizeInMB} MB`)
+
+  // Проверка на размер файла
+  if (isFileTooLarge(filePath, 50)) {
+    logWithTimestamp('Видео превышает лимит в 50 MB. Отправка пропущена.')
+    return
+  }
 
   let mediaType = 'document'
   if (message.media.photo) {
@@ -242,6 +256,15 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       try {
         await convertVideo(filePath, convertedVideoPath, width, height)
 
+        // Проверка на размер после конвертации
+        if (isFileTooLarge(convertedVideoPath, 50)) {
+          logWithTimestamp(
+            'Конвертированное видео превышает лимит в 50 MB. Отправка пропущена.'
+          )
+          deleteFile(convertedVideoPath)
+          return
+        }
+
         // Отправляем конвертированное видео
         await bot.telegram.sendVideo(
           chatId,
@@ -260,7 +283,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
         if (ctx) await ctx.reply('Ошибка преобразования видео.')
       }
     } else {
-      // Если формат уже MP4, отправляем оригинал
       logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.')
 
       await bot.telegram.sendVideo(
