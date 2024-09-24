@@ -64,6 +64,7 @@ export async function validateChannelOrGroup(channelId, ctx) {
   }
 }
 
+//Удаление файла
 function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
     fs.unlink(filePath, (err) => {
@@ -74,6 +75,12 @@ function deleteFile(filePath) {
       }
     })
   }
+}
+
+//Обработка сообщения с временным штампом
+function logWithTimestamp(message) {
+  const now = new Date().toISOString()
+  console.log(`[${now}] ${message}`)
 }
 
 // --- Основные функции для обработки сообщений ---
@@ -158,13 +165,13 @@ async function convertVideo(inputPath, outputPath) {
 // Асинхронная обработка загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message.message?.trim()) {
-    console.log('Сообщение не содержит текста, медиа не будет отправлено.')
+    logWithTimestamp('Сообщение не содержит текста, медиа не будет отправлено.')
     return
   }
 
   if (!(await checkChatAccess(chatId))) {
     const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
-    console.error(accessErrorMessage)
+    logWithTimestamp(accessErrorMessage)
     if (ctx) await ctx.reply(accessErrorMessage)
     return
   }
@@ -172,29 +179,36 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   const fileExtension = getMediaFileExtension(message.media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
 
-  console.log(`Скачивание медиа: ${filePath}`)
+  logWithTimestamp(`Скачивание медиа: ${filePath}`)
 
   try {
     await client.downloadMedia(message.media, { outputFile: filePath })
   } catch (error) {
-    console.error('Ошибка при скачивании медиа:', error.message)
+    logWithTimestamp('Ошибка при скачивании медиа:', error.message)
     if (ctx) await ctx.reply('Ошибка при скачивании медиа.')
     return
   }
 
   // Логирование MIME-типа
   const mimeType = message.media?.document?.mimeType
-  console.log(`MIME-тип медиа: ${mimeType}`)
+  logWithTimestamp(`MIME-тип медиа: ${mimeType}`)
+
+  // Получаем размер файла в байтах и преобразуем его в мегабайты
+  const fileSizeInBytes = message.media.document.size || 0
+  const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
+  logWithTimestamp(`Размер видео: ${fileSizeInMB} MB`)
 
   let mediaType = 'document'
   if (message.media.photo) {
     mediaType = 'photo'
   } else if (
-    message.media.document?.mimeType === 'video/mp4' ||
-    mimeType === 'video/quicktime'
+    mimeType === 'video/mp4' ||
+    mimeType === 'video/quicktime' ||
+    mimeType === 'video/x-msvideo' ||
+    mimeType === 'video/x-matroska'
   ) {
     mediaType = 'video'
-  } else if (message.media.document?.mimeType === 'image/gif') {
+  } else if (mimeType === 'image/gif') {
     mediaType = 'animation'
   }
 
@@ -207,11 +221,19 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     const width = videoAttributes?.w || 720
     const height = videoAttributes?.h || 1080
 
-    console.log(`Получены размеры видео: ширина ${width}, высота ${height}`)
+    logWithTimestamp(
+      `Получены размеры видео: ширина ${width}px, высота ${height}px`
+    )
 
     // Проверка, нужно ли конвертировать видео в MP4
-    if (mimeType === 'video/quicktime') {
-      console.log('Видео в формате QuickTime, требуется конвертация в MP4.')
+    if (
+      mimeType === 'video/quicktime' ||
+      mimeType === 'video/x-msvideo' ||
+      mimeType === 'video/x-matroska'
+    ) {
+      logWithTimestamp(
+        `Видео в формате ${mimeType}, требуется конвертация в MP4.`
+      )
       convertedVideoPath = path.resolve(
         __dirname,
         `converted_${message.id}.mp4`
@@ -232,14 +254,14 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
           }
         )
 
-        console.log('Видео успешно отправлено после конвертации.')
+        logWithTimestamp('Видео успешно отправлено после конвертации.')
       } catch (error) {
-        console.error('Ошибка преобразования видео:', error.message)
+        logWithTimestamp('Ошибка преобразования видео:', error.message)
         if (ctx) await ctx.reply('Ошибка преобразования видео.')
       }
     } else {
       // Если формат уже MP4, отправляем оригинал
-      console.log('Видео уже в формате MP4, отправляем оригинал.')
+      logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.')
 
       await bot.telegram.sendVideo(
         chatId,
