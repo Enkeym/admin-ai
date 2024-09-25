@@ -1,12 +1,13 @@
 import { Telegraf } from 'telegraf'
-import { tgToken, myGroup } from './config.js'
+import { myGroup, tgToken } from './config.js'
 import {
   downloadAndSendMedia,
   getUnreadMessages,
+  validateChannelOrGroup,
   watchNewMessages,
-  watchNewMessagesAi,
-  validateChannelOrGroup
+  watchNewMessagesAi
 } from './mediaHandler.js'
+import { clearState, updateState } from './stateManager.js'
 
 export const bot = new Telegraf(tgToken)
 let currentProcess = null
@@ -37,6 +38,7 @@ bot.command('watch', async (ctx) => {
     ctx.reply(
       `Наблюдение за новыми сообщениями из каналов/групп: ${args.join(', ')}`
     )
+    updateState('watch', args)
   } catch (error) {
     console.error('Ошибка в процессе /watch:', error)
     await notifyProcessStopped(ctx)
@@ -51,11 +53,11 @@ bot.command('watchAi', async (ctx) => {
   }
 
   const chat = await validateChannelOrGroup(args[0], ctx)
-  if (!chat) return // Если ID неправильный, ничего не делаем
+  if (!chat) return
 
   // Если ID корректный, останавливаем текущий процесс
   if (currentProcess) {
-    await currentProcess() // Остановка текущего процесса
+    await currentProcess()
     await notifyProcessStopped(ctx)
   }
 
@@ -66,6 +68,7 @@ bot.command('watchAi', async (ctx) => {
         ', '
       )}`
     )
+    updateState('watchAi', args)
   } catch (error) {
     console.error('Ошибка в процессе /watchAi:', error)
     await notifyProcessStopped(ctx)
@@ -135,11 +138,12 @@ bot.command('start', (ctx) => {
 })
 
 // Команда для остановки текущего процесса
-bot.command('stop', (ctx) => {
+bot.command('stop', async (ctx) => {
   if (currentProcess) {
-    currentProcess()
+    await currentProcess()
     currentProcess = null
-    ctx.reply('Текущий процесс остановлен.')
+    clearState()
+    ctx.reply('Текущий процесс остановлен и состояние очищено.')
   } else {
     ctx.reply('Нет активного процесса наблюдения.')
   }

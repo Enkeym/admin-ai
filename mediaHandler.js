@@ -17,11 +17,17 @@ const __dirname = path.dirname(__filename)
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
+export function clearCache() {
+  chatAccessCache.clear()
+  foundChannelsCache.clear()
+  console.log('Очищаем предыдущий кеш...')
+}
+
 // --- Вспомогательные функции ---
 
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
-    console.log(`Использование кэша для чата: ${chatId}`)
+    console.log(`Чат с ID ${chatId} взят из кеша.`)
     return chatAccessCache.get(chatId)
   }
 
@@ -31,9 +37,12 @@ export async function checkChatAccess(chatId) {
     if (!foundChannelsCache.has(chatId)) {
       console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
       foundChannelsCache.add(chatId)
+    } else {
+      console.log(`Канал с ID ${chatId} уже был добавлен в кеш ранее.`)
     }
 
     chatAccessCache.set(chatId, true)
+    console.log(`Чат с ID ${chatId} добавлен в кеш.`)
     return true
   } catch (error) {
     console.error(
@@ -46,12 +55,17 @@ export async function checkChatAccess(chatId) {
 }
 
 export async function validateChannelOrGroup(channelId, ctx) {
+  if (foundChannelsCache.has(channelId)) {
+    console.log(`Канал/группа с ID ${channelId} взяты из кеша.`)
+  }
+
   try {
     const chat = await client.getEntity(channelId)
 
     if (!foundChannelsCache.has(channelId)) {
       console.log(`Канал/группа с ID ${channelId} успешно найден.`)
       foundChannelsCache.add(channelId)
+      console.log(`Канал/группа с ID ${channelId} добавлены в кеш.`)
     }
 
     return chat
@@ -65,7 +79,7 @@ export async function validateChannelOrGroup(channelId, ctx) {
   }
 }
 
-//Удаление файла
+// Удаление файла
 function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
     fs.unlink(filePath, (err) => {
@@ -80,64 +94,52 @@ function deleteFile(filePath) {
 
 // --- Основные функции для обработки сообщений ---
 
-async function sendMessageOrMedia(
-  chatId,
-  message,
-  mediaPath = null,
-  mediaType = null,
-  ctx
-) {
-  if (!(await checkChatAccess(chatId))) {
-    const errorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Сообщение/медиа не отправлено.`
-    console.error(errorMessage)
-    if (ctx) await ctx.reply(errorMessage)
-    return
-  }
-
+async function sendTextMessage(chatId, message, ctx) {
   try {
-    console.log(`Попытка отправки сообщения или медиа в чат ${chatId}`)
-
-    if (mediaPath && fs.existsSync(mediaPath)) {
-      const mediaOptions = { caption: message.message }
-
-      switch (mediaType) {
-        case 'video':
-          await bot.telegram.sendVideo(
-            chatId,
-            { source: mediaPath },
-            mediaOptions
-          )
-          break
-        case 'photo':
-          await bot.telegram.sendPhoto(
-            chatId,
-            { source: mediaPath },
-            mediaOptions
-          )
-          break
-        case 'animation':
-          await bot.telegram.sendAnimation(
-            chatId,
-            { source: mediaPath },
-            mediaOptions
-          )
-          break
-        default:
-          await bot.telegram.sendDocument(
-            chatId,
-            { source: mediaPath },
-            mediaOptions
-          )
-      }
-
-      console.log('Медиа успешно отправлено.')
-    } else {
-      await bot.telegram.sendMessage(chatId, message.message)
-      console.log('Сообщение успешно отправлено.')
-    }
+    await bot.telegram.sendMessage(chatId, message.message)
+    console.log('Сообщение успешно отправлено.')
   } catch (error) {
-    console.error('Ошибка при отправке:', error.message)
-    if (ctx) await ctx.reply('Ошибка при отправке сообщения/медиа.')
+    console.error('Ошибка при отправке текста:', error.message)
+    if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
+  }
+}
+
+async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
+  const mediaOptions = { caption: message.message }
+  try {
+    switch (mediaType) {
+      case 'video':
+        await bot.telegram.sendVideo(
+          chatId,
+          { source: mediaPath },
+          mediaOptions
+        )
+        break
+      case 'photo':
+        await bot.telegram.sendPhoto(
+          chatId,
+          { source: mediaPath },
+          mediaOptions
+        )
+        break
+      case 'animation':
+        await bot.telegram.sendAnimation(
+          chatId,
+          { source: mediaPath },
+          mediaOptions
+        )
+        break
+      default:
+        await bot.telegram.sendDocument(
+          chatId,
+          { source: mediaPath },
+          mediaOptions
+        )
+    }
+    console.log('Медиа успешно отправлено.')
+  } catch (error) {
+    console.error('Ошибка при отправке медиа:', error.message)
+    if (ctx) await ctx.reply('Ошибка при отправке медиа.')
   }
 }
 
@@ -192,16 +194,13 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  // Логирование MIME-типа
   const mimeType = message.media?.document?.mimeType
   logWithTimestamp(`MIME-тип медиа: ${mimeType}`)
 
-  // Получаем размер файла в байтах и преобразуем его в мегабайты
   const fileSizeInBytes = message.media.document.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
   logWithTimestamp(`Размер видео: ${fileSizeInMB} MB`)
 
-  // Проверка на размер файла
   if (isFileTooLarge(filePath, 50)) {
     logWithTimestamp('Видео превышает лимит в 50 MB. Отправка пропущена.')
     return
@@ -234,7 +233,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       `Получены размеры видео: ширина ${width}px, высота ${height}px`
     )
 
-    // Проверка, нужно ли конвертировать видео в MP4
     if (
       mimeType === 'video/quicktime' ||
       mimeType === 'video/x-msvideo' ||
@@ -251,7 +249,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       try {
         await convertVideo(filePath, convertedVideoPath, width, height)
 
-        // Проверка на размер после конвертации
         if (isFileTooLarge(convertedVideoPath, 50)) {
           logWithTimestamp(
             'Конвертированное видео превышает лимит в 50 MB. Отправка пропущена.'
@@ -260,17 +257,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
           return
         }
 
-        // Отправляем конвертированное видео
-        await bot.telegram.sendVideo(
-          chatId,
-          { source: convertedVideoPath },
-          {
-            supports_streaming: true,
-            caption: message.message,
-            width: width,
-            height: height
-          }
-        )
+        await sendMedia(chatId, convertedVideoPath, 'video', message, ctx)
 
         logWithTimestamp('Видео успешно отправлено после конвертации.')
       } catch (error) {
@@ -279,35 +266,23 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       }
     } else {
       logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.')
-
-      await bot.telegram.sendVideo(
-        chatId,
-        { source: filePath },
-        {
-          supports_streaming: true,
-          caption: message.message,
-          width: width,
-          height: height
-        }
-      )
+      await sendMedia(chatId, filePath, 'video', message, ctx)
     }
   } else {
-    await sendMessageOrMedia(chatId, message, filePath, mediaType, ctx)
+    await sendMedia(chatId, filePath, mediaType, message, ctx)
   }
 
-  // Удаление исходного и конвертированного видео после отправки
   deleteFile(filePath)
   if (convertedVideoPath) deleteFile(convertedVideoPath)
 }
 
 // Асинхронная отправка текстовых сообщений
 export async function sendMessageToChat(chatId, message, ctx) {
-  await sendMessageOrMedia(chatId, { message }, null, null, ctx)
+  await sendTextMessage(chatId, message, ctx)
 }
 
 // --- Функции для работы с AI ---
 
-// Функция для проверки наличия сообщения с ошибкой ИИ
 function containsAiErrorMessage(response) {
   const normalizedResponse = response.trim().toLowerCase()
 
@@ -333,7 +308,6 @@ function containsAiErrorMessage(response) {
   return containsAdditionalPatterns
 }
 
-// Функция для обработки сообщения с ИИ
 async function processMessageWithAi(message) {
   try {
     console.log('Запрос к ИИ для обработки сообщения.')
@@ -364,7 +338,6 @@ async function processMessageWithAi(message) {
 
 // --- Функции для мониторинга сообщений ---
 
-// Функция для наблюдения за новыми сообщениями
 export async function watchNewMessages(channelIds, ctx) {
   if (!client.connected) await client.connect()
 
