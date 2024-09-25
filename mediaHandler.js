@@ -25,10 +25,10 @@ export function clearCache() {
 
 // --- Вспомогательные функции ---
 
+// Проверка чата на доступ только один раз через кеш
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
-    console.log(`Чат с ID ${chatId} взят из кеша.`)
-    return chatAccessCache.get(chatId)
+    return chatAccessCache.get(chatId) // Возвращаем кешированное значение
   }
 
   try {
@@ -37,26 +37,25 @@ export async function checkChatAccess(chatId) {
     if (!foundChannelsCache.has(chatId)) {
       console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
       foundChannelsCache.add(chatId)
-    } else {
-      console.log(`Канал с ID ${chatId} уже был добавлен в кеш ранее.`)
     }
 
-    chatAccessCache.set(chatId, true)
-    console.log(`Чат с ID ${chatId} добавлен в кеш.`)
+    chatAccessCache.set(chatId, true) // Сохраняем успешный доступ в кеш
     return true
   } catch (error) {
     console.error(
       `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`,
       error
     )
-    chatAccessCache.set(chatId, false)
+    chatAccessCache.set(chatId, false) // Сохраняем неудачный доступ в кеш
     return false
   }
 }
 
+// Проверка наличия канала или группы
 export async function validateChannelOrGroup(channelId, ctx) {
   if (foundChannelsCache.has(channelId)) {
     console.log(`Канал/группа с ID ${channelId} взяты из кеша.`)
+    return true
   }
 
   try {
@@ -80,7 +79,7 @@ export async function validateChannelOrGroup(channelId, ctx) {
 }
 
 // Удаление файла
-function deleteFile(filePath) {
+export function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
     fs.unlink(filePath, (err) => {
       if (err) {
@@ -108,13 +107,25 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
   const mediaOptions = { caption: message.message }
   try {
     switch (mediaType) {
-      case 'video':
+      case 'video': {
+        const videoAttributes = message.media.document.attributes.find(
+          (attr) => attr.className === 'DocumentAttributeVideo'
+        )
+        const width = videoAttributes?.w || 720
+        const height = videoAttributes?.h || 1080
+
         await bot.telegram.sendVideo(
           chatId,
           { source: mediaPath },
-          mediaOptions
+          {
+            ...mediaOptions,
+            supports_streaming: true,
+            width: width,
+            height: height
+          }
         )
         break
+      }
       case 'photo':
         await bot.telegram.sendPhoto(
           chatId,
@@ -144,9 +155,9 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
 }
 
 // Функция для преобразования видео через FFmpeg с использованием кодеков H.264 и AAC
-async function convertVideo(inputPath, outputPath) {
+async function convertVideo(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
-    const command = `ffmpeg -i "${inputPath}" -vcodec h264 -acodec aac -strict -2 -movflags +faststart "${outputPath}"`
+    const command = `ffmpeg -i "${inputPath}" -vf "scale=${width}:${height}" -vcodec h264 -acodec aac -strict -2 -movflags +faststart "${outputPath}"`
 
     exec(command, (error) => {
       if (error) {
