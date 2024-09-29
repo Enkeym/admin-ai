@@ -10,6 +10,7 @@ import { client } from './telegramClient.js'
 import { additionalPatterns, aiErrorMessages } from './utils/aiErrorMessages.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
+import {containsAiErrorMessage} from './utils/aiChecker.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -17,15 +18,14 @@ const __dirname = path.dirname(__filename)
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
+// --- Кэширование доступа к чатам ---
 export function clearCache() {
   chatAccessCache.clear()
   foundChannelsCache.clear()
-  console.log('Очищаем предыдущий кеш...')
+  logWithTimestamp('Очищаем предыдущий кеш...', 'info')
 }
 
-// --- Вспомогательные функции ---
-
-// Проверка чата на доступ только один раз через кеш
+// Проверка доступа к чату с кэшированием
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
     return chatAccessCache.get(chatId) // Возвращаем кешированное значение
@@ -33,20 +33,22 @@ export async function checkChatAccess(chatId) {
 
   try {
     const chat = await client.getEntity(chatId)
-
     if (!foundChannelsCache.has(chatId)) {
-      console.log(`Бот имеет доступ к чату: ${chat.title || chat.username}`)
+      logWithTimestamp(
+        `Бот имеет доступ к чату: ${chat.title || chat.username}`,
+        'info'
+      )
       foundChannelsCache.add(chatId)
     }
 
-    chatAccessCache.set(chatId, true) // Сохраняем успешный доступ в кеш
+    chatAccessCache.set(chatId, true)
     return true
   } catch (error) {
-    console.error(
-      `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа.`,
-      error
+    logWithTimestamp(
+      `Ошибка: Чат с ID ${chatId} не найден или бот не имеет доступа: ${error.message}`,
+      'error'
     )
-    chatAccessCache.set(chatId, false) // Сохраняем неудачный доступ в кеш
+    chatAccessCache.set(chatId, false)
     return false
   }
 }
@@ -54,63 +56,79 @@ export async function checkChatAccess(chatId) {
 // Проверка наличия канала или группы
 export async function validateChannelOrGroup(channelId, ctx) {
   if (foundChannelsCache.has(channelId)) {
-    console.log(`Канал/группа с ID ${channelId} взяты из кеша.`)
+    logWithTimestamp(`Канал/группа с ID ${channelId} взяты из кеша.`, 'info')
     return true
   }
 
   try {
     const chat = await client.getEntity(channelId)
-
-    if (!foundChannelsCache.has(channelId)) {
-      console.log(`Канал/группа с ID ${channelId} успешно найден.`)
-      foundChannelsCache.add(channelId)
-      console.log(`Канал/группа с ID ${channelId} добавлены в кеш.`)
-    }
-
+    foundChannelsCache.add(channelId)
+    logWithTimestamp(
+      `Канал/группа с ID ${channelId} успешно найден и добавлен в кеш.`,
+      'info'
+    )
     return chat
   } catch (error) {
-    const errorMessage = `Канал или группа с ID ${channelId} не найдены. Пожалуйста, проверьте правильность введённого ID.`
-    console.error(errorMessage)
+    const errorMessage = `Канал или группа с ID ${channelId} не найдены.`
+    logWithTimestamp(errorMessage, 'error')
 
     if (ctx) ctx.reply(errorMessage)
-
     return null
   }
 }
+
+// --- Обработка медиа и текстов ---
 
 // Удаление файла
 export function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
     fs.unlink(filePath, (err) => {
       if (err) {
-        console.error(`Не удалось удалить файл: ${filePath}`, err)
+        logWithTimestamp(
+          `Не удалось удалить файл: ${filePath} - ${err.message}`,
+          'error'
+        )
       } else {
-        console.log(`Файл удален: ${filePath}`)
+        logWithTimestamp(`Файл удален: ${filePath}`, 'info')
       }
     })
   }
 }
 
-// --- Основные функции для обработки сообщений ---
-
-async function sendTextMessage(chatId, message, ctx) {
+// Асинхронная отправка текстовых сообщений
+export async function sendMessageToChat(chatId, message, ctx) {
   if (!message?.message?.trim()) {
-    console.log('Сообщение пустое или undefined.')
+    logWithTimestamp('Сообщение пустое или undefined.', 'warn')
     if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
     return
   }
 
-  console.log('sendTextMessage:', JSON.stringify(message, null, 2))
-
   try {
     await bot.telegram.sendMessage(chatId, message.message)
-    console.log('Сообщение успешно отправлено.')
+    logWithTimestamp('Сообщение успешно отправлено.', 'info')
   } catch (error) {
-    console.error('Ошибка при отправке текста:', error.message)
+    logWithTimestamp(`Ошибка при отправке текста: ${error.message}`, 'error')
     if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
   }
 }
 
+// Асинхронная отправка текстовых сообщений
+export async function sendTextMessage(chatId, message, ctx) {
+  if (!message?.message?.trim()) {
+    logWithTimestamp('Сообщение пустое или undefined.', 'warn')
+    if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
+    return
+  }
+  try {
+    await bot.telegram.sendMessage(chatId, message.message)
+    logWithTimestamp('Сообщение успешно отправлено.', 'info')
+  } catch (error) {
+    logWithTimestamp(`Ошибка при отправке текста: ${error.message}`, 'error')
+    if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
+  }
+}
+
+// Отправка медиафайлов
 async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
   const mediaOptions = { caption: message.message }
   try {
@@ -128,8 +146,8 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
           {
             ...mediaOptions,
             supports_streaming: true,
-            width: width,
-            height: height
+            width,
+            height
           }
         )
         break
@@ -155,89 +173,95 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
           mediaOptions
         )
     }
-    console.log('Медиа успешно отправлено.')
+    logWithTimestamp('Медиа успешно отправлено.', 'info')
   } catch (error) {
-    console.error('Ошибка при отправке медиа:', error.message)
+    logWithTimestamp(`Ошибка при отправке медиа: ${error.message}`, 'error')
     if (ctx) await ctx.reply('Ошибка при отправке медиа.')
   }
 }
 
-// Функция для преобразования видео через FFmpeg с использованием кодеков H.264 и AAC
+// Конвертация видео через FFmpeg
 async function convertVideo(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
     const command = `ffmpeg -i "${inputPath}" -vf "scale=${width}:${height}" -vcodec h264 -acodec aac -strict -2 -movflags +faststart "${outputPath}"`
 
     exec(command, (error) => {
       if (error) {
-        console.error(`Ошибка преобразования видео: ${error.message}`)
+        logWithTimestamp(
+          `Ошибка преобразования видео: ${error.message}`,
+          'error'
+        )
         return reject(error)
       }
-      console.log(`Видео успешно преобразовано: ${outputPath}`)
+      logWithTimestamp(`Видео успешно преобразовано: ${outputPath}`, 'info')
       resolve(outputPath)
     })
   })
 }
 
-// Функция для проверки размера файла
+// Проверка размера файла
 function isFileTooLarge(filePath, maxSizeMB) {
   const stats = fs.statSync(filePath)
-  const fileSizeInBytes = stats.size
-  const fileSizeInMB = fileSizeInBytes / (1024 * 1024)
+  const fileSizeInMB = stats.size / (1024 * 1024)
   return fileSizeInMB > maxSizeMB
 }
 
-// Асинхронная обработка загрузки и отправки медиа
+// Асинхронная загрузка и отправка медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message.message?.trim()) {
-    logWithTimestamp('Сообщение не содержит текста, медиа не будет отправлено.')
+    logWithTimestamp(
+      'Сообщение не содержит текста, медиа не будет отправлено.',
+      'warn'
+    )
     return
   }
 
   if (!(await checkChatAccess(chatId))) {
-    const accessErrorMessage = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
-    logWithTimestamp(accessErrorMessage)
-    if (ctx) await ctx.reply(accessErrorMessage)
+    const errorMsg = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
+    logWithTimestamp(errorMsg, 'error')
+    if (ctx) await ctx.reply(errorMsg)
     return
   }
 
   const fileExtension = getMediaFileExtension(message.media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
-
-  logWithTimestamp(`Скачивание медиа: ${filePath}`)
+  logWithTimestamp(`Скачивание медиа: ${filePath}`, 'info')
 
   try {
     await client.downloadMedia(message.media, { outputFile: filePath })
   } catch (error) {
-    logWithTimestamp('Ошибка при скачивании медиа:', error.message)
+    logWithTimestamp(`Ошибка при скачивании медиа: ${error.message}`, 'error')
     if (ctx) await ctx.reply('Ошибка при скачивании медиа.')
     return
   }
 
   const mimeType = message.media?.document?.mimeType
-  logWithTimestamp(`MIME-тип медиа: ${mimeType}`)
+  logWithTimestamp(`MIME-тип медиа: ${mimeType}`, 'info')
 
   const fileSizeInBytes = message.media.document.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
-  logWithTimestamp(`Размер видео: ${fileSizeInMB} MB`)
+  logWithTimestamp(`Размер видео: ${fileSizeInMB} MB`, 'info')
 
   if (isFileTooLarge(filePath, 50)) {
-    logWithTimestamp('Видео превышает лимит в 50 MB. Отправка пропущена.')
+    logWithTimestamp(
+      'Видео превышает лимит в 50 MB. Отправка пропущена.',
+      'warn'
+    )
     return
   }
 
   let mediaType = 'document'
-  if (message.media.photo) {
-    mediaType = 'photo'
-  } else if (
-    mimeType === 'video/mp4' ||
-    mimeType === 'video/quicktime' ||
-    mimeType === 'video/x-msvideo' ||
-    mimeType === 'video/x-matroska'
-  ) {
+  if (message.media.photo) mediaType = 'photo'
+  else if (
+    [
+      'video/mp4',
+      'video/quicktime',
+      'video/x-msvideo',
+      'video/x-matroska'
+    ].includes(mimeType)
+  )
     mediaType = 'video'
-  } else if (mimeType === 'image/gif') {
-    mediaType = 'animation'
-  }
+  else if (mimeType === 'image/gif') mediaType = 'animation'
 
   let convertedVideoPath = null
 
@@ -249,16 +273,18 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     const height = videoAttributes?.h || 1080
 
     logWithTimestamp(
-      `Получены размеры видео: ширина ${width}px, высота ${height}px`
+      `Получены размеры видео: ширина ${width}px, высота ${height}px`,
+      'info'
     )
 
     if (
-      mimeType === 'video/quicktime' ||
-      mimeType === 'video/x-msvideo' ||
-      mimeType === 'video/x-matroska'
+      ['video/quicktime', 'video/x-msvideo', 'video/x-matroska'].includes(
+        mimeType
+      )
     ) {
       logWithTimestamp(
-        `Видео в формате ${mimeType}, требуется конвертация в MP4.`
+        `Видео в формате ${mimeType}, требуется конвертация в MP4.`,
+        'info'
       )
       convertedVideoPath = path.resolve(
         __dirname,
@@ -270,21 +296,24 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
         if (isFileTooLarge(convertedVideoPath, 50)) {
           logWithTimestamp(
-            'Конвертированное видео превышает лимит в 50 MB. Отправка пропущена.'
+            'Конвертированное видео превышает лимит в 50 MB. Отправка пропущена.',
+            'warn'
           )
           deleteFile(convertedVideoPath)
           return
         }
 
         await sendMedia(chatId, convertedVideoPath, 'video', message, ctx)
-
-        logWithTimestamp('Видео успешно отправлено после конвертации.')
+        logWithTimestamp('Видео успешно отправлено после конвертации.', 'info')
       } catch (error) {
-        logWithTimestamp('Ошибка преобразования видео:', error.message)
+        logWithTimestamp(
+          `Ошибка преобразования видео: ${error.message}`,
+          'error'
+        )
         if (ctx) await ctx.reply('Ошибка преобразования видео.')
       }
     } else {
-      logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.')
+      logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.', 'info')
       await sendMedia(chatId, filePath, 'video', message, ctx)
     }
   } else {
@@ -295,86 +324,42 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   if (convertedVideoPath) deleteFile(convertedVideoPath)
 }
 
-// Асинхронная отправка текстовых сообщений
-export async function sendMessageToChat(chatId, message, ctx) {
-  // Логирование для отладки
-  console.log('sendMessageToChat:', JSON.stringify(message, null, 2))
-
-  // Здесь message - это объект, в котором есть свойство message.message
-  if (!message?.message?.trim()) {
-    console.log('Сообщение пустое или undefined.')
-    if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
-    return
-  }
-
-  try {
-    // Отправляем текстовое сообщение
-    await bot.telegram.sendMessage(chatId, message.message)
-    console.log('Сообщение успешно отправлено.')
-  } catch (error) {
-    console.error('Ошибка при отправке текста:', error.message)
-    if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
-  }
-}
-
-// --- Функции для работы с AI ---
-
-function containsAiErrorMessage(response) {
-  const normalizedResponse = response.trim().toLowerCase()
-
-  const isAiErrorMessage = aiErrorMessages.some((errorMsg) => {
-    const normalizedErrorMsg = errorMsg.toLowerCase()
-    return normalizedResponse.includes(normalizedErrorMsg)
-  })
-
-  if (isAiErrorMessage) {
-    console.log('Сообщение полностью совпадает с известной ошибкой ИИ.')
-    return true
-  }
-
-  const containsAdditionalPatterns = additionalPatterns.some((pattern) => {
-    const regex = new RegExp(pattern, 'i')
-    return regex.test(normalizedResponse)
-  })
-
-  if (containsAdditionalPatterns) {
-    console.log('Сообщение содержит чувствительные ключевые слова или шаблоны.')
-  }
-
-  return containsAdditionalPatterns
-}
+// --- Обработка сообщений с AI ---
 
 async function processMessageWithAi(message) {
   if (!message?.message?.trim()) {
-    console.log('Ошибка: Сообщение отсутствует или не содержит текста.')
+    logWithTimestamp(
+      'Ошибка: Сообщение отсутствует или не содержит текста.',
+      'error'
+    )
     return message.message || 'Текст отсутствует'
   }
 
-  console.log('processMessageWithAi:', JSON.stringify(message, null, 2))
-
   try {
-    console.log('Запрос к ИИ для обработки сообщения.')
+    logWithTimestamp('Запрос к ИИ для обработки сообщения.', 'info')
 
     if (containsAiErrorMessage(message.message)) {
-      console.log(
-        'Исходное сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку ИИ.'
+      logWithTimestamp(
+        'Исходное сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку ИИ.',
+        'warn'
       )
-      return { message: message.message } // Возвращаем объект с текстом
+      return { message: message.message }
     }
 
     const processedMessage = await requestForAi(message.message)
 
     if (!processedMessage || containsAiErrorMessage(processedMessage)) {
-      console.log(
-        'Ответ ИИ содержит ошибку или чувствительный ответ. Возвращаем исходное сообщение.'
+      logWithTimestamp(
+        'Ответ ИИ содержит ошибку или чувствительный ответ. Возвращаем исходное сообщение.',
+        'warn'
       )
-      return { message: message.message } // Возвращаем объект с исходным текстом
+      return { message: message.message }
     }
 
-    console.log('Ответ ИИ получен и обработан.')
-    return { message: processedMessage } // Возвращаем объект с обработанным текстом
+    logWithTimestamp('Ответ ИИ получен и обработан.', 'info')
+    return { message: processedMessage }
   } catch (error) {
-    console.error('Ошибка при запросе к ИИ:', error.message)
+    logWithTimestamp(`Ошибка при запросе к ИИ: ${error.message}`, 'error')
     return { message: message.message || 'Ошибка обработки сообщения ИИ' }
   }
 }
@@ -388,9 +373,7 @@ export async function watchNewMessages(channelIds, ctx) {
 
   for (const channelId of channelIds) {
     const chat = await validateChannelOrGroup(channelId, ctx)
-    if (!chat) {
-      continue
-    }
+    if (!chat) continue
 
     const handler = async (event) => {
       try {
@@ -398,16 +381,23 @@ export async function watchNewMessages(channelIds, ctx) {
         if (message.media) {
           await downloadAndSendMedia(myGroup, message, ctx)
         } else if (message.message) {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-
-          // Передаем сообщение как объект с ключом message
+          logWithTimestamp(
+            'Медиа не найдено, отправка текстового сообщения',
+            'info'
+          )
           await sendMessageToChat(myGroup, { message: message.message }, ctx)
         } else {
-          console.log('Сообщение не содержит текста и не является медиа.')
+          logWithTimestamp(
+            'Сообщение не содержит текста и не является медиа.',
+            'warn'
+          )
           if (ctx) await ctx.reply('Сообщение пустое или не содержит медиа.')
         }
       } catch (error) {
-        console.error('Ошибка при обработке нового сообщения:', error.message)
+        logWithTimestamp(
+          `Ошибка при обработке нового сообщения: ${error.message}`,
+          'error'
+        )
         if (ctx) ctx.reply('Ошибка при обработке нового сообщения.')
       }
     }
@@ -425,10 +415,10 @@ export async function watchNewMessages(channelIds, ctx) {
   if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями.')
 
   return (ctx) => {
-    currentHandlers.forEach(({ handler, event }) => {
+    currentHandlers.forEach(({ handler, event }) =>
       client.removeEventHandler(handler, event)
-    })
-    console.log('Прекращено наблюдение за новыми сообщениями.')
+    )
+    logWithTimestamp('Прекращено наблюдение за новыми сообщениями.', 'info')
     if (ctx) ctx.reply('Прекращено наблюдение за новыми сообщениями.')
   }
 }
@@ -441,9 +431,7 @@ export async function watchNewMessagesAi(channelIds, ctx) {
 
   for (const channelId of channelIds) {
     const chat = await validateChannelOrGroup(channelId, ctx)
-    if (!chat) {
-      continue
-    }
+    if (!chat) continue
 
     const handler = async (event) => {
       try {
@@ -451,29 +439,36 @@ export async function watchNewMessagesAi(channelIds, ctx) {
 
         const containsAds = await checkForAds(message.message)
         if (containsAds === 'Да') {
-          console.log('Сообщение содержит рекламу, пропуск...')
+          logWithTimestamp('Сообщение содержит рекламу, пропуск...', 'warn')
           return
         }
 
         if (containsAiErrorMessage(message.message)) {
-          console.log(
-            'Сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку AI.'
+          logWithTimestamp(
+            'Сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку AI.',
+            'warn'
           )
-          await sendMessageToChat(myGroup, { message: message.message }, ctx) // Передаем объект
+          await sendMessageToChat(myGroup, { message: message.message }, ctx)
           return
         }
 
         let processedMessage = await processMessageWithAi(message)
 
         if (message.media) {
-          message.message = processedMessage.message // Изменение объекта сообщения
+          message.message = processedMessage.message
           await downloadAndSendMedia(myGroup, message, ctx)
         } else {
-          console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, processedMessage, ctx) // Передаем объект с обработанным сообщением
+          logWithTimestamp(
+            'Медиа не найдено, отправка текстового сообщения',
+            'info'
+          )
+          await sendMessageToChat(myGroup, processedMessage, ctx)
         }
       } catch (error) {
-        console.error('Ошибка при обработке сообщения AI:', error.message)
+        logWithTimestamp(
+          `Ошибка при обработке сообщения AI: ${error.message}`,
+          'error'
+        )
         await sendMessageToChat(myGroup, { message: message.message }, ctx)
       }
     }
@@ -482,7 +477,6 @@ export async function watchNewMessagesAi(channelIds, ctx) {
       handler,
       new NewMessage({ chats: [parseInt(channelId) || channelId] })
     )
-
     currentHandlers.push({
       handler,
       event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
@@ -492,14 +486,15 @@ export async function watchNewMessagesAi(channelIds, ctx) {
   if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями с обработкой AI.')
 
   return (ctx) => {
-    currentHandlers.forEach(({ handler, event }) => {
+    currentHandlers.forEach(({ handler, event }) =>
       client.removeEventHandler(handler, event)
-    })
-
-    console.log('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
-    if (ctx) {
+    )
+    logWithTimestamp(
+      'Прекращено наблюдение за новыми сообщениями с обработкой AI.',
+      'info'
+    )
+    if (ctx)
       ctx.reply('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
-    }
   }
 }
 
