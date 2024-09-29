@@ -8,7 +8,7 @@ import { logWithTimestamp } from '../utils/logger.js'
 
 let cachedToken = null
 let tokenExpiresAt = null
-const responseCache = new Map() // Кеш для ответов AI
+const responseCache = new Map()
 let tokenUpdateInterval = null
 
 // Функция для получения токена доступа
@@ -92,6 +92,12 @@ async function checkResponseCache(text) {
 async function saveResponseToCache(text, response) {
   responseCache.set(text, response)
   logWithTimestamp('Ответ сохранен в кеш.', 'info')
+}
+
+// Очистка кеша ответов AI
+export function clearResponseCache() {
+  responseCache.clear()
+  logWithTimestamp('Кеш ответов AI очищен перед завершением работы.', 'info')
 }
 
 // Функция для взаимодействия с GigaChat API с обработкой ошибки 429

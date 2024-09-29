@@ -7,10 +7,9 @@ import { checkForAds, requestForAi } from './ai/giga.js'
 import { bot } from './bot.js'
 import { myGroup } from './config.js'
 import { client } from './telegramClient.js'
-import { additionalPatterns, aiErrorMessages } from './utils/aiErrorMessages.js'
+import { containsAiErrorMessage } from './utils/aiChecker.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
-import {containsAiErrorMessage} from './utils/aiChecker.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -57,7 +56,7 @@ export async function checkChatAccess(chatId) {
 export async function validateChannelOrGroup(channelId, ctx) {
   if (foundChannelsCache.has(channelId)) {
     logWithTimestamp(`Канал/группа с ID ${channelId} взяты из кеша.`, 'info')
-    return true
+    return await client.getEntity(channelId)
   }
 
   try {

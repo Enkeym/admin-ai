@@ -85,11 +85,11 @@ bot.command('sum', async (ctx) => {
   if (!channelId) return ctx.reply('Вы не указали ID канала')
 
   const chat = await validateChannelOrGroup(channelId, ctx)
-  if (!chat) return // Если ID неправильный, ничего не делаем
+  if (!chat) return 
 
-  // Если ID корректный, останавливаем текущий процесс
+
   if (currentProcess) {
-    await currentProcess() // Остановка текущего процесса
+    await currentProcess() 
     await notifyProcessStopped(ctx)
   }
 
@@ -160,7 +160,7 @@ bot.on('text', (ctx) => {
     )
   } else {
     ctx.reply(
-      `Ваше сообщение не распознано как команда. Используйте /start для просмотра доступных команд.`
+      `Ваше сообщение "${messageText}" не распознано как команда. Используйте /start для просмотра доступных команд.`
     )
   }
 })

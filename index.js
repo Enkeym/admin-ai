@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { clearResponseCache } from './ai/giga.js'
 import { bot } from './bot.js'
 import { myGroup } from './config.js'
 import {
@@ -82,6 +83,7 @@ function cleanUpFiles(directory) {
     cleanUpFiles(mediaDirectory)
     await safeConnect(client)
     clearCache()
+    clearResponseCache()
     await checkChatAccess(myGroup)
     loadState()
     const state = getState()
