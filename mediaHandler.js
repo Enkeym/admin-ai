@@ -94,6 +94,14 @@ export function deleteFile(filePath) {
 // --- Основные функции для обработки сообщений ---
 
 async function sendTextMessage(chatId, message, ctx) {
+  if (!message?.message?.trim()) {
+    console.log('Сообщение пустое или undefined.')
+    if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
+    return
+  }
+
+  console.log('sendTextMessage:', JSON.stringify(message, null, 2))
+
   try {
     await bot.telegram.sendMessage(chatId, message.message)
     console.log('Сообщение успешно отправлено.')
@@ -289,7 +297,24 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
 // Асинхронная отправка текстовых сообщений
 export async function sendMessageToChat(chatId, message, ctx) {
-  await sendTextMessage(chatId, message, ctx)
+  // Логирование для отладки
+  console.log('sendMessageToChat:', JSON.stringify(message, null, 2))
+
+  // Здесь message - это объект, в котором есть свойство message.message
+  if (!message?.message?.trim()) {
+    console.log('Сообщение пустое или undefined.')
+    if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
+    return
+  }
+
+  try {
+    // Отправляем текстовое сообщение
+    await bot.telegram.sendMessage(chatId, message.message)
+    console.log('Сообщение успешно отправлено.')
+  } catch (error) {
+    console.error('Ошибка при отправке текста:', error.message)
+    if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
+  }
 }
 
 // --- Функции для работы с AI ---
@@ -320,6 +345,13 @@ function containsAiErrorMessage(response) {
 }
 
 async function processMessageWithAi(message) {
+  if (!message?.message?.trim()) {
+    console.log('Ошибка: Сообщение отсутствует или не содержит текста.')
+    return message.message || 'Текст отсутствует'
+  }
+
+  console.log('processMessageWithAi:', JSON.stringify(message, null, 2))
+
   try {
     console.log('Запрос к ИИ для обработки сообщения.')
 
@@ -327,23 +359,23 @@ async function processMessageWithAi(message) {
       console.log(
         'Исходное сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку ИИ.'
       )
-      return message.message
+      return { message: message.message } // Возвращаем объект с текстом
     }
 
     const processedMessage = await requestForAi(message.message)
 
-    if (containsAiErrorMessage(processedMessage)) {
+    if (!processedMessage || containsAiErrorMessage(processedMessage)) {
       console.log(
         'Ответ ИИ содержит ошибку или чувствительный ответ. Возвращаем исходное сообщение.'
       )
-      return message.message
+      return { message: message.message } // Возвращаем объект с исходным текстом
     }
 
     console.log('Ответ ИИ получен и обработан.')
-    return processedMessage
+    return { message: processedMessage } // Возвращаем объект с обработанным текстом
   } catch (error) {
     console.error('Ошибка при запросе к ИИ:', error.message)
-    return message.message
+    return { message: message.message || 'Ошибка обработки сообщения ИИ' }
   }
 }
 
@@ -365,9 +397,14 @@ export async function watchNewMessages(channelIds, ctx) {
         const message = event.message
         if (message.media) {
           await downloadAndSendMedia(myGroup, message, ctx)
-        } else {
+        } else if (message.message) {
           console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, message.message, ctx)
+
+          // Передаем сообщение как объект с ключом message
+          await sendMessageToChat(myGroup, { message: message.message }, ctx)
+        } else {
+          console.log('Сообщение не содержит текста и не является медиа.')
+          if (ctx) await ctx.reply('Сообщение пустое или не содержит медиа.')
         }
       } catch (error) {
         console.error('Ошибка при обработке нового сообщения:', error.message)
@@ -422,22 +459,22 @@ export async function watchNewMessagesAi(channelIds, ctx) {
           console.log(
             'Сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку AI.'
           )
-          await sendMessageToChat(myGroup, message.message, ctx)
+          await sendMessageToChat(myGroup, { message: message.message }, ctx) // Передаем объект
           return
         }
 
         let processedMessage = await processMessageWithAi(message)
 
         if (message.media) {
-          message.message = processedMessage
+          message.message = processedMessage.message // Изменение объекта сообщения
           await downloadAndSendMedia(myGroup, message, ctx)
         } else {
           console.log('Медиа не найдено, отправка текстового сообщения')
-          await sendMessageToChat(myGroup, processedMessage, ctx)
+          await sendMessageToChat(myGroup, processedMessage, ctx) // Передаем объект с обработанным сообщением
         }
       } catch (error) {
         console.error('Ошибка при обработке сообщения AI:', error.message)
-        await sendMessageToChat(myGroup, message.message, ctx)
+        await sendMessageToChat(myGroup, { message: message.message }, ctx)
       }
     }
 
