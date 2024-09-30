@@ -222,12 +222,11 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  if (!message.media || !message.media.document) {
-    logWithTimestamp('Медиа или документ отсутствуют в сообщении.', 'warn')
-    if (ctx) await ctx.reply('Медиа отсутствует.')
+  if (!message || !message.media || !message.media.document) {
+    logWithTimestamp('Ошибка: сообщение или медиа отсутствуют.', 'error')
+    if (ctx) await ctx.reply('Ошибка: медиа или документ отсутствуют.')
     return
   }
-
   const fileExtension = getMediaFileExtension(message.media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
   logWithTimestamp(`Скачивание медиа: ${filePath}`, 'info')
