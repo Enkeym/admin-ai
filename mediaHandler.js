@@ -207,7 +207,7 @@ function isFileTooLarge(filePath, maxSizeMB) {
 
 // Асинхронная загрузка и отправка медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
-  if (!message.message?.trim()) {
+  if (!message || !message.message?.trim()) {
     logWithTimestamp(
       'Сообщение не содержит текста, медиа не будет отправлено.',
       'warn'
@@ -219,6 +219,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     const errorMsg = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     logWithTimestamp(errorMsg, 'error')
     if (ctx) await ctx.reply(errorMsg)
+    return
+  }
+
+  if (!message.media || !message.media.document) {
+    logWithTimestamp('Медиа или документ отсутствуют в сообщении.', 'warn')
+    if (ctx) await ctx.reply('Медиа отсутствует.')
     return
   }
 
@@ -234,7 +240,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  const mimeType = message.media?.document?.mimeType
+  const mimeType = message.media.document.mimeType
   logWithTimestamp(`MIME-тип медиа: ${mimeType}`, 'info')
 
   const fileSizeInBytes = message.media.document.size || 0
