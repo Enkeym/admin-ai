@@ -218,15 +218,14 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!(await checkChatAccess(chatId))) {
     const errorMsg = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
     logWithTimestamp(errorMsg, 'error')
-    if (ctx) await ctx.reply(errorMsg)
     return
   }
 
-  if (!message || !message.media || !message.media.document) {
-    logWithTimestamp('Ошибка: сообщение или медиа отсутствуют.', 'error')
-    if (ctx) await ctx.reply('Ошибка: медиа или документ отсутствуют.')
+  if (!message.media || !message.media.document) {
+    logWithTimestamp('Сообщение не содержит медиа или документ.', 'warn')
     return
   }
+
   const fileExtension = getMediaFileExtension(message.media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
   logWithTimestamp(`Скачивание медиа: ${filePath}`, 'info')
@@ -235,7 +234,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     await client.downloadMedia(message.media, { outputFile: filePath })
   } catch (error) {
     logWithTimestamp(`Ошибка при скачивании медиа: ${error.message}`, 'error')
-    if (ctx) await ctx.reply('Ошибка при скачивании медиа.')
     return
   }
 
@@ -314,7 +312,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
           `Ошибка преобразования видео: ${error.message}`,
           'error'
         )
-        if (ctx) await ctx.reply('Ошибка преобразования видео.')
       }
     } else {
       logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.', 'info')
@@ -382,6 +379,16 @@ export async function watchNewMessages(channelIds, ctx) {
     const handler = async (event) => {
       try {
         const message = event.message
+
+        // Проверяем, содержит ли сообщение ошибки или чувствительные паттерны
+        if (containsAiErrorMessage(message.message)) {
+          logWithTimestamp(
+            'Сообщение содержит ошибки ИИ или чувствительные паттерны. Пропускаем обработку.',
+            'warn'
+          )
+          return
+        }
+
         if (message.media) {
           await downloadAndSendMedia(myGroup, message, ctx)
         } else if (message.message) {

@@ -16,6 +16,8 @@ export function getMediaFileExtension(media) {
       'image/webp': 'webp',
       'image/svg+xml': 'svg',
       'image/tiff': 'tiff',
+      'image/vnd.adobe.photoshop': 'psd', // Файлы Photoshop
+      'image/x-icon': 'ico',
 
       // Видео
       'video/mp4': 'mp4',
@@ -33,6 +35,7 @@ export function getMediaFileExtension(media) {
       'audio/aac': 'aac',
       'audio/flac': 'flac',
       'audio/webm': 'weba',
+      'audio/x-m4a': 'm4a', // Apple MPEG-4 Audio
 
       // Документы
       'application/pdf': 'pdf',
@@ -45,12 +48,17 @@ export function getMediaFileExtension(media) {
       'application/vnd.ms-powerpoint': 'ppt',
       'application/vnd.openxmlformats-officedocument.presentationml.presentation':
         'pptx',
+      'application/vnd.oasis.opendocument.text': 'odt', // OpenDocument Text
+      'application/vnd.oasis.opendocument.spreadsheet': 'ods', // OpenDocument Spreadsheet
+      'application/vnd.oasis.opendocument.presentation': 'odp', // OpenDocument Presentation
+      'application/vnd.ms-project': 'mpp', // Microsoft Project
 
       // Архивы
       'application/zip': 'zip',
       'application/x-rar-compressed': 'rar',
       'application/x-7z-compressed': '7z',
       'application/gzip': 'gz',
+      'application/x-tar': 'tar',
 
       // Текстовые файлы
       'text/plain': 'txt',
@@ -58,7 +66,28 @@ export function getMediaFileExtension(media) {
       'text/css': 'css',
       'application/json': 'json',
       'application/javascript': 'js',
-      'application/xml': 'xml'
+      'application/xml': 'xml',
+      'text/markdown': 'md', // Markdown файлы
+      'application/x-sh': 'sh', // Shell скрипты
+      'application/sql': 'sql', // SQL файлы
+
+      // Шрифты
+      'font/ttf': 'ttf',
+      'font/woff': 'woff',
+      'font/woff2': 'woff2',
+      'application/vnd.ms-fontobject': 'eot', // Embedded OpenType
+      'font/otf': 'otf',
+
+      // Программы и исполняемые файлы
+      'application/x-msdownload': 'exe',
+      'application/x-apple-diskimage': 'dmg',
+      'application/vnd.android.package-archive': 'apk',
+
+      // Прочие форматы
+      'application/x-httpd-php': 'php', // PHP файлы
+      'application/x-perl': 'pl', // Perl файлы
+      'application/x-python-code': 'py', // Python файлы
+      'application/x-ruby': 'rb' // Ruby файлы
     }
 
     // Возвращаем расширение на основе MIME-типа или 'document' по умолчанию
