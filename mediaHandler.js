@@ -223,58 +223,64 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  if (!message.media || !message.media.document) {
+  // Проверяем наличие медиа (фото, видео, анимация или документ)
+  const media = message.media
+  if (
+    !media ||
+    (!media.document && !media.photo && !media.animation && !media.video)
+  ) {
     logWithTimestamp('Сообщение не содержит медиа или документ.', 'warn')
     return
   }
 
-  const fileExtension = getMediaFileExtension(message.media)
+  // Определяем тип медиа и формируем путь для сохранения файла
+  const fileExtension = getMediaFileExtension(media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
+  logWithTimestamp(`Путь для сохранения медиа: ${filePath}`, 'info')
 
   try {
-    await client.downloadMedia(message.media, { outputFile: filePath })
+    // Скачиваем медиафайл
+    await client.downloadMedia(media, { outputFile: filePath })
+    logWithTimestamp(`Медиа успешно загружено в файл: ${filePath}`, 'info')
   } catch (error) {
     logWithTimestamp(`Ошибка при скачивании медиа: ${error.message}`, 'error')
     return
   }
 
-  const mimeType = message.media.document.mimeType
+  // Определяем MIME-тип и размер файла
+  const mimeType = media.document?.mimeType || 'image/jpeg' // По умолчанию для фото
   logWithTimestamp(`MIME-тип медиа: ${mimeType}`, 'info')
 
-  const fileSizeInBytes = message.media.document.size || 0
+  const fileSizeInBytes = media.document?.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
-  logWithTimestamp(`Размер видео: ${fileSizeInMB} MB`, 'info')
+  logWithTimestamp(`Размер медиа: ${fileSizeInMB} MB`, 'info')
 
+  // Проверяем размер файла
   if (isFileTooLarge(filePath, 50)) {
     logWithTimestamp(
-      'Видео превышает лимит в 50 MB. Отправка пропущена.',
+      'Медиа превышает лимит в 50 MB. Отправка пропущена.',
       'warn'
     )
     return
   }
 
+  // Определяем тип медиа: фото, видео, анимация, документ
   let mediaType = 'document'
-  if (message.media.photo) {
+  if (media.photo) {
     mediaType = 'photo'
     logWithTimestamp('Тип медиа — фото.', 'info')
-  } else if (
-    [
-      'video/mp4',
-      'video/quicktime',
-      'video/x-msvideo',
-      'video/x-matroska'
-    ].includes(mimeType)
-  ) {
+  } else if (media.animation) {
+    mediaType = 'animation'
+    logWithTimestamp('Тип медиа — анимация (GIF).', 'info')
+  } else if (media.video) {
     mediaType = 'video'
     logWithTimestamp('Тип медиа — видео.', 'info')
-  } else if (mimeType === 'image/gif') {
-    mediaType = 'animation'
-    logWithTimestamp('Тип медиа — анимация.', 'info')
   }
 
+  // Если медиа — видео, обрабатываем отдельно с возможной конвертацией
   let convertedVideoPath = null
   if (mediaType === 'video') {
-    const videoAttributes = message.media.document.attributes.find(
+    const videoAttributes = media.document?.attributes?.find(
       (attr) => attr.className === 'DocumentAttributeVideo'
     )
     const width = videoAttributes?.w || 720
@@ -324,9 +330,11 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       await sendMedia(chatId, filePath, 'video', message, ctx)
     }
   } else {
+    // Отправляем фото, анимацию или документ без дополнительной обработки
     await sendMedia(chatId, filePath, mediaType, message, ctx)
   }
 
+  // Удаляем временные файлы после отправки
   deleteFile(filePath)
   if (convertedVideoPath) deleteFile(convertedVideoPath)
 }
