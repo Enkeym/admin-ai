@@ -16,7 +16,7 @@ export function getMediaFileExtension(media) {
       'image/webp': 'webp',
       'image/svg+xml': 'svg',
       'image/tiff': 'tiff',
-      'image/vnd.adobe.photoshop': 'psd', // Файлы Photoshop
+      'image/vnd.adobe.photoshop': 'psd',
       'image/x-icon': 'ico',
 
       // Видео
@@ -35,7 +35,7 @@ export function getMediaFileExtension(media) {
       'audio/aac': 'aac',
       'audio/flac': 'flac',
       'audio/webm': 'weba',
-      'audio/x-m4a': 'm4a', // Apple MPEG-4 Audio
+      'audio/x-m4a': 'm4a',
 
       // Документы
       'application/pdf': 'pdf',
@@ -48,10 +48,10 @@ export function getMediaFileExtension(media) {
       'application/vnd.ms-powerpoint': 'ppt',
       'application/vnd.openxmlformats-officedocument.presentationml.presentation':
         'pptx',
-      'application/vnd.oasis.opendocument.text': 'odt', // OpenDocument Text
-      'application/vnd.oasis.opendocument.spreadsheet': 'ods', // OpenDocument Spreadsheet
-      'application/vnd.oasis.opendocument.presentation': 'odp', // OpenDocument Presentation
-      'application/vnd.ms-project': 'mpp', // Microsoft Project
+      'application/vnd.oasis.opendocument.text': 'odt',
+      'application/vnd.oasis.opendocument.spreadsheet': 'ods',
+      'application/vnd.oasis.opendocument.presentation': 'odp',
+      'application/vnd.ms-project': 'mpp',
 
       // Архивы
       'application/zip': 'zip',
@@ -67,15 +67,15 @@ export function getMediaFileExtension(media) {
       'application/json': 'json',
       'application/javascript': 'js',
       'application/xml': 'xml',
-      'text/markdown': 'md', // Markdown файлы
-      'application/x-sh': 'sh', // Shell скрипты
-      'application/sql': 'sql', // SQL файлы
+      'text/markdown': 'md',
+      'application/x-sh': 'sh',
+      'application/sql': 'sql',
 
       // Шрифты
       'font/ttf': 'ttf',
       'font/woff': 'woff',
       'font/woff2': 'woff2',
-      'application/vnd.ms-fontobject': 'eot', // Embedded OpenType
+      'application/vnd.ms-fontobject': 'eot',
       'font/otf': 'otf',
 
       // Программы и исполняемые файлы
@@ -84,13 +84,12 @@ export function getMediaFileExtension(media) {
       'application/vnd.android.package-archive': 'apk',
 
       // Прочие форматы
-      'application/x-httpd-php': 'php', // PHP файлы
-      'application/x-perl': 'pl', // Perl файлы
-      'application/x-python-code': 'py', // Python файлы
-      'application/x-ruby': 'rb' // Ruby файлы
+      'application/x-httpd-php': 'php',
+      'application/x-perl': 'pl',
+      'application/x-python-code': 'py',
+      'application/x-ruby': 'rb'
     }
 
-    // Возвращаем расширение на основе MIME-типа или 'document' по умолчанию
     return mimeToExtensionMap[mimeType] || 'document'
   }
 

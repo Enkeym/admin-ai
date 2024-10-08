@@ -5,18 +5,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { gigaAuth, gigaScope } from '../config.js'
 import { containsAiErrorMessage } from '../utils/aiChecker.js'
 import { logWithTimestamp } from '../utils/logger.js'
+import pLimit from 'p-limit'
 
-let cachedToken = null
-let tokenExpiresAt = null
-const responseCache = new Map()
-let tokenUpdateInterval = null
-
-// Функция для получения токена доступа
+// Функция для получения токена доступа без кэширования
 async function getToken() {
-  if (cachedToken && tokenExpiresAt && new Date() < tokenExpiresAt) {
-    return { accessToken: cachedToken, expiresAt: tokenExpiresAt }
-  }
-
   const config = {
     method: 'post',
     maxBodyLength: Infinity,
@@ -36,20 +28,10 @@ async function getToken() {
 
   try {
     const response = await axios(config)
-    if (
-      response.data &&
-      response.data.access_token &&
-      response.data.expires_at
-    ) {
-      const { access_token: accessToken, expires_at: expiresAt } = response.data
-      cachedToken = accessToken
-      tokenExpiresAt = new Date(expiresAt * 1000)
-      scheduleTokenUpdate()
-      return { accessToken, expiresAt: tokenExpiresAt }
+    if (response.data && response.data.access_token) {
+      return { accessToken: response.data.access_token }
     } else {
-      throw new Error(
-        'Не удалось получить access_token или expires_at из ответа'
-      )
+      throw new Error('Не удалось получить access_token')
     }
   } catch (error) {
     console.error(
@@ -60,51 +42,13 @@ async function getToken() {
   }
 }
 
-// Планирование автоматического обновления токена
-function scheduleTokenUpdate() {
-  if (tokenUpdateInterval) clearTimeout(tokenUpdateInterval)
-  const timeUntilExpiry = tokenExpiresAt - Date.now()
-
-  if (timeUntilExpiry > 0) {
-    tokenUpdateInterval = setTimeout(async () => {
-      await getToken()
-      scheduleTokenUpdate() // Перепланируем следующий апдейт
-    }, Math.min(timeUntilExpiry - 60000, 2147483647)) // Устанавливаем безопасный тайм-аут
-  }
-}
-
 // Вспомогательная функция для задержки
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Проверка кеша ответов
-async function checkResponseCache(text) {
-  const cachedResponse = responseCache.get(text)
-  if (cachedResponse) {
-    logWithTimestamp('Ответ взят из кеша.', 'info')
-    return cachedResponse
-  }
-  return null
-}
-
-// Сохранение ответа в кеш
-async function saveResponseToCache(text, response) {
-  responseCache.set(text, response)
-  logWithTimestamp('Ответ сохранен в кеш.', 'info')
-}
-
-// Очистка кеша ответов AI
-export function clearResponseCache() {
-  responseCache.clear()
-  logWithTimestamp('Кеш ответов AI очищен перед завершением работы.', 'info')
-}
-
 // Функция для взаимодействия с GigaChat API с обработкой ошибки 429
 async function giga(content = '', system = '', retryCount = 3) {
-  const cachedResponse = await checkResponseCache(content)
-  if (cachedResponse) return cachedResponse
-
   try {
     let token = await getToken()
 
@@ -145,9 +89,7 @@ async function giga(content = '', system = '', retryCount = 3) {
       response.data.choices[0] &&
       response.data.choices[0].message
     ) {
-      const aiResponse = response.data.choices[0].message.content
-      await saveResponseToCache(content, aiResponse) // Сохраняем ответ в кеш
-      return aiResponse
+      return response.data.choices[0].message.content
     } else {
       throw new Error('Не удалось получить корректный ответ от GigaChat API')
     }
@@ -161,18 +103,7 @@ async function giga(content = '', system = '', retryCount = 3) {
       return await giga(content, system, retryCount - 1)
     } else if (error.response && error.response.status === 401) {
       logWithTimestamp('Токен истек, получаем новый токен...', 'warn')
-      cachedToken = null
-      try {
-        const token = await getToken()
-        return await giga(content, system)
-      } catch (err) {
-        logWithTimestamp(
-          'Не удалось получить новый токен или повторить запрос: ' +
-            err.message,
-          'error'
-        )
-        throw err
-      }
+      return await giga(content, system, retryCount - 1)
     } else {
       logWithTimestamp(
         'Ошибка в функции giga: ' +
@@ -200,7 +131,7 @@ async function checkForAds(text) {
   if (urlPattern.test(text)) {
     const matchedWord = text.match(urlPattern)
     logWithTimestamp(
-      `Обнаружена ссылка (${matchedWord}), сообщение классифицировано как реклама. Сработал паттерн: URL.`,
+      `Обнаружена ссылка (${matchedWord}), сообщение классифицировано как реклама.`,
       'info'
     )
     return 'Да'
@@ -210,7 +141,7 @@ async function checkForAds(text) {
   if (subscriptionPattern.test(text)) {
     const matchedWord = text.match(subscriptionPattern)
     logWithTimestamp(
-      `Обнаружены рекламные термины (${matchedWord}), сообщение классифицировано как реклама. Сработал паттерн: Subscription.`,
+      `Обнаружены рекламные термины (${matchedWord}), сообщение классифицировано как реклама.`,
       'info'
     )
     return 'Да'
@@ -220,7 +151,7 @@ async function checkForAds(text) {
   if (mentionPattern.test(text)) {
     const matchedWord = text.match(mentionPattern)
     logWithTimestamp(
-      `Обнаружено упоминание аккаунта (${matchedWord}), сообщение классифицировано как реклама. Сработал паттерн: Mention (@).`,
+      `Обнаружено упоминание аккаунта (${matchedWord}), сообщение классифицировано как реклама.`,
       'info'
     )
     return 'Да'
@@ -230,7 +161,7 @@ async function checkForAds(text) {
   if (charityPattern.test(text)) {
     const matchedWord = text.match(charityPattern)
     logWithTimestamp(
-      `Обнаружены благотворительные термины (${matchedWord}), сообщение не классифицировано как реклама. Сработал паттерн: Charity.`,
+      `Обнаружены благотворительные термины (${matchedWord}), сообщение не классифицировано как реклама.`,
       'info'
     )
     return 'Нет'
@@ -256,11 +187,8 @@ async function checkForAds(text) {
     Если сообщение содержит рекламу, ответь "Да". Если рекламы нет, ответь "Нет".
   `
 
-  logWithTimestamp(`Текст, отправляемый на AI-проверку: ${text}`, 'info')
-
   try {
     const result = await giga(prompt, 'Определение рекламы в тексте сообщения')
-    logWithTimestamp(`Результат AI-проверки: ${result}`, 'info')
     return result
   } catch (error) {
     logWithTimestamp(
@@ -271,15 +199,21 @@ async function checkForAds(text) {
   }
 }
 
-// Параллельная обработка сообщений
+const limit = pLimit(5)
+
 async function processMessagesInParallel(messages) {
   try {
     const processedMessages = await Promise.all(
-      messages.map(async (message) => {
-        return await giga(message)
-      })
+      messages.map((message) =>
+        limit(async () => {
+          return await giga(message)
+        })
+      )
     )
-    logWithTimestamp('Все сообщения обработаны параллельно.', 'info')
+    logWithTimestamp(
+      'Все сообщения обработаны с ограничением параллельности.',
+      'info'
+    )
     return processedMessages
   } catch (error) {
     logWithTimestamp(
