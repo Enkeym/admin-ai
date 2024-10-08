@@ -1,13 +1,14 @@
-import { exec } from 'child_process'
+import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs'
 import path from 'path'
 import { NewMessage } from 'telegram/events/NewMessage.js'
 import { fileURLToPath } from 'url'
-import { checkForAds, requestForAi } from './ai/giga.js'
+import { requestForAi } from './ai/giga.js'
 import { bot } from './bot.js'
 import { myGroup } from './config.js'
 import { client } from './telegramClient.js'
 import { containsAiErrorMessage } from './utils/aiChecker.js'
+import { containsAdContent } from './utils/filterChecker.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
 
@@ -27,7 +28,7 @@ export function clearCache() {
 // Проверка доступа к чату с кэшированием
 export async function checkChatAccess(chatId) {
   if (chatAccessCache.has(chatId)) {
-    return chatAccessCache.get(chatId) // Возвращаем кешированное значение
+    return chatAccessCache.get(chatId)
   }
 
   try {
@@ -179,22 +180,23 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
   }
 }
 
-// Конвертация видео через FFmpeg
+// Конвертация видео через fluent-ffmpeg
 async function convertVideo(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
-    const command = `ffmpeg -i "${inputPath}" -vf "scale=${width}:${height}" -vcodec h264 -acodec aac -strict -2 -movflags +faststart "${outputPath}"`
-
-    exec(command, (error) => {
-      if (error) {
-        logWithTimestamp(
-          `Ошибка преобразования видео: ${error.message}`,
-          'error'
-        )
-        return reject(error)
-      }
-      logWithTimestamp(`Видео успешно преобразовано: ${outputPath}`, 'info')
-      resolve(outputPath)
-    })
+    ffmpeg(inputPath)
+      .outputOptions('-vf', `scale=${width}:${height}`)
+      .videoCodec('libx264')
+      .audioCodec('aac')
+      .outputOptions('-movflags', '+faststart')
+      .on('end', () => {
+        logWithTimestamp(`Видео успешно преобразовано: ${outputPath}`, 'info')
+        resolve(outputPath)
+      })
+      .on('error', (err) => {
+        logWithTimestamp(`Ошибка преобразования видео: ${err.message}`, 'error')
+        reject(err)
+      })
+      .save(outputPath)
   })
 }
 
@@ -228,7 +230,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
   const fileExtension = getMediaFileExtension(message.media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
-  logWithTimestamp(`Скачивание медиа: ${filePath}`, 'info')
 
   try {
     await client.downloadMedia(message.media, { outputFile: filePath })
@@ -253,20 +254,25 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   }
 
   let mediaType = 'document'
-  if (message.media.photo) mediaType = 'photo'
-  else if (
+  if (message.media.photo) {
+    mediaType = 'photo'
+    logWithTimestamp('Тип медиа — фото.', 'info')
+  } else if (
     [
       'video/mp4',
       'video/quicktime',
       'video/x-msvideo',
       'video/x-matroska'
     ].includes(mimeType)
-  )
+  ) {
     mediaType = 'video'
-  else if (mimeType === 'image/gif') mediaType = 'animation'
+    logWithTimestamp('Тип медиа — видео.', 'info')
+  } else if (mimeType === 'image/gif') {
+    mediaType = 'animation'
+    logWithTimestamp('Тип медиа — анимация.', 'info')
+  }
 
   let convertedVideoPath = null
-
   if (mediaType === 'video') {
     const videoAttributes = message.media.document.attributes.find(
       (attr) => attr.className === 'DocumentAttributeVideo'
@@ -380,10 +386,10 @@ export async function watchNewMessages(channelIds, ctx) {
       try {
         const message = event.message
 
-        // Проверяем, содержит ли сообщение ошибки или чувствительные паттерны
-        if (containsAiErrorMessage(message.message)) {
+        // Проверяем на рекламное содержание без использования ИИ
+        if (containsAdContent(message.message)) {
           logWithTimestamp(
-            'Сообщение содержит ошибки ИИ или чувствительные паттерны. Пропускаем обработку.',
+            'Сообщение классифицировано как реклама, пропуск...',
             'warn'
           )
           return
@@ -434,7 +440,7 @@ export async function watchNewMessages(channelIds, ctx) {
   }
 }
 
-// Функция для наблюдения за новыми сообщениями с AI
+// Функция для наблюдения за новыми сообщениями с использованием ИИ
 export async function watchNewMessagesAi(channelIds, ctx) {
   if (!client.connected) await client.connect()
 
@@ -448,39 +454,60 @@ export async function watchNewMessagesAi(channelIds, ctx) {
       try {
         const message = event.message
 
-        const containsAds = await checkForAds(message.message)
-        if (containsAds === 'Да') {
-          logWithTimestamp('Сообщение содержит рекламу, пропуск...', 'warn')
-          return
-        }
-
-        if (containsAiErrorMessage(message.message)) {
+        // Проверка на рекламное содержание (фильтр без ИИ)
+        if (containsAdContent(message.message)) {
           logWithTimestamp(
-            'Сообщение содержит признаки ошибки или чувствительной информации. Пропускаем обработку AI.',
+            'Сообщение классифицировано как реклама, пропуск...',
             'warn'
           )
-          await sendMessageToChat(myGroup, { message: message.message }, ctx)
           return
         }
 
-        let processedMessage = await processMessageWithAi(message)
-
-        if (message.media) {
-          message.message = processedMessage.message
-          await downloadAndSendMedia(myGroup, message, ctx)
-        } else {
+        // Проверка на ошибки ИИ и чувствительное содержание
+        if (containsAiErrorMessage(message.message)) {
           logWithTimestamp(
-            'Медиа не найдено, отправка текстового сообщения',
+            'Сообщение содержит ошибки ИИ или чувствительные паттерны, пропуск...',
+            'warn'
+          )
+          return
+        }
+
+        // Проверка на наличие медиа
+        if (message.media) {
+          logWithTimestamp(
+            'Сообщение содержит медиа, передаем на обработку.',
             'info'
           )
-          await sendMessageToChat(myGroup, processedMessage, ctx)
+          await downloadAndSendMedia(myGroup, message, ctx)
+        } else if (message.message) {
+          let processedMessage
+          try {
+            const result = await processMessageWithAi(message)
+            processedMessage = result.message
+            logWithTimestamp('Сообщение успешно обработано ИИ.', 'info')
+          } catch (error) {
+            logWithTimestamp(
+              `Ошибка при обработке сообщения ИИ: ${error.message}`,
+              'error'
+            )
+            return
+          }
+
+          // Отправляем обработанное сообщение в чат
+          await sendMessageToChat(myGroup, { message: processedMessage }, ctx)
+        } else {
+          logWithTimestamp(
+            'Сообщение не содержит текста и не является медиа.',
+            'warn'
+          )
+          if (ctx) await ctx.reply('Сообщение пустое или не содержит медиа.')
         }
       } catch (error) {
         logWithTimestamp(
-          `Ошибка при обработке сообщения AI: ${error.message}`,
+          `Ошибка при обработке нового сообщения: ${error.message}`,
           'error'
         )
-        await sendMessageToChat(myGroup, { message: message.message }, ctx)
+        if (ctx) ctx.reply('Ошибка при обработке нового сообщения.')
       }
     }
 
@@ -494,18 +521,18 @@ export async function watchNewMessagesAi(channelIds, ctx) {
     })
   }
 
-  if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями с обработкой AI.')
+  if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями с обработкой ИИ.')
 
   return (ctx) => {
     currentHandlers.forEach(({ handler, event }) =>
       client.removeEventHandler(handler, event)
     )
     logWithTimestamp(
-      'Прекращено наблюдение за новыми сообщениями с обработкой AI.',
+      'Прекращено наблюдение за новыми сообщениями с обработкой ИИ.',
       'info'
     )
     if (ctx)
-      ctx.reply('Прекращено наблюдение за новыми сообщениями с обработкой AI.')
+      ctx.reply('Прекращено наблюдение за новыми сообщениями с обработкой ИИ.')
   }
 }
 

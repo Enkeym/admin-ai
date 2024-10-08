@@ -1,3 +1,4 @@
+// aiChecker.js
 import { additionalPatterns, aiErrorMessages } from './aiErrorMessages.js'
 import { logWithTimestamp } from './logger.js'
 
@@ -16,7 +17,7 @@ export function containsAiErrorMessage(response) {
     return true
   }
 
-  // Проверяем на дополнительные паттерны
+  // Проверяем на дополнительные паттерны ИИ
   const containsAdditionalPatterns = additionalPatterns.some((pattern) =>
     new RegExp(pattern, 'i').test(normalizedResponse)
   )

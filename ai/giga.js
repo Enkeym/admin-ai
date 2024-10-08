@@ -1,11 +1,12 @@
 import axios from 'axios'
 import https from 'https'
+import pLimit from 'p-limit'
 import qs from 'qs'
 import { v4 as uuidv4 } from 'uuid'
 import { gigaAuth, gigaScope } from '../config.js'
 import { containsAiErrorMessage } from '../utils/aiChecker.js'
+import { containsAdContent } from '../utils/filterChecker.js'
 import { logWithTimestamp } from '../utils/logger.js'
-import pLimit from 'p-limit'
 
 // Функция для получения токена доступа без кэширования
 async function getToken() {
@@ -117,63 +118,21 @@ async function giga(content = '', system = '', retryCount = 3) {
 
 // Функция для проверки наличия рекламы в тексте
 async function checkForAds(text) {
-  const urlPattern = /https?:\/\/[^\s]+/g
-  const subscriptionPattern =
-    /подписаться|подпишитесь|присоединяйтесь|канал|группа|акция|скидка|предложение|купить|покупка|заказ|доставка|дешевле|выгодно|продажа|продаем|помощь|дарите/i
+  // Сначала выполняем проверку с помощью фильтрации без ИИ
+  let containsAds = containsAdContent(text)
 
-  const mentionPattern = /@\w+/g
-  const callToActionPattern =
-    /присоединяйтесь|сделайте заказ|поддержите|приносите|внесите вклад|помогите|призываю/i
-  const charityPattern =
-    /благотворительность|помощь детям|гуманитарная миссия|пожертвования|сбор подарков|санаторий|дети/i
-
-  // Проверка наличия ссылок
-  if (urlPattern.test(text)) {
-    const matchedWord = text.match(urlPattern)
-    logWithTimestamp(
-      `Обнаружена ссылка (${matchedWord}), сообщение классифицировано как реклама.`,
-      'info'
-    )
-    return 'Да'
+  // Если реклама найдена на этапе без ИИ, сразу возвращаем результат
+  if (containsAds === 'Да') {
+    return containsAds
   }
 
-  // Проверка на упоминание каналов, акций или призыва к действию
-  if (subscriptionPattern.test(text)) {
-    const matchedWord = text.match(subscriptionPattern)
-    logWithTimestamp(
-      `Обнаружены рекламные термины (${matchedWord}), сообщение классифицировано как реклама.`,
-      'info'
-    )
-    return 'Да'
-  }
-
-  // Проверка на наличие упоминаний через @
-  if (mentionPattern.test(text)) {
-    const matchedWord = text.match(mentionPattern)
-    logWithTimestamp(
-      `Обнаружено упоминание аккаунта (${matchedWord}), сообщение классифицировано как реклама.`,
-      'info'
-    )
-    return 'Да'
-  }
-
-  // Проверка на благотворительность
-  if (charityPattern.test(text)) {
-    const matchedWord = text.match(charityPattern)
-    logWithTimestamp(
-      `Обнаружены благотворительные термины (${matchedWord}), сообщение не классифицировано как реклама.`,
-      'info'
-    )
-    return 'Нет'
-  }
-
-  // Проверка сообщения на ошибки и паттерны
+  // Проверяем сообщение на ошибки ИИ
   if (containsAiErrorMessage(text)) {
     logWithTimestamp('Сообщение содержит чувствительную информацию.', 'warn')
     return 'Да'
   }
 
-  // AI-проверка содержания текста
+  // Если не найдено рекламное содержание и нет ошибок ИИ, обращаемся к ИИ
   const prompt = `
     Пожалуйста, проанализируй следующее сообщение и определи, содержит ли оно прямую или косвенную рекламу. Под рекламой понимается любое сообщение, которое:
     - Призывает к покупке, заказу или подписке.
