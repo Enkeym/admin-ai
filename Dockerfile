@@ -1,6 +1,7 @@
-FROM node:18-alpine
+# Dockerfile
+FROM node:18-alpine AS builder
 
-WORKDIR /index
+WORKDIR /app
 
 COPY package*.json ./
 COPY yarn.lock ./
@@ -8,6 +9,12 @@ COPY yarn.lock ./
 RUN yarn install --frozen-lockfile
 
 COPY . .
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app ./
 
 EXPOSE 3000
 
