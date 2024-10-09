@@ -223,7 +223,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  // Проверяем наличие медиа (фото, видео, анимация или документ)
   const media = message.media
   if (
     !media ||
@@ -233,13 +232,11 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  // Определяем тип медиа и формируем путь для сохранения файла
   const fileExtension = getMediaFileExtension(media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
   logWithTimestamp(`Путь для сохранения медиа: ${filePath}`, 'info')
 
   try {
-    // Скачиваем медиафайл
     await client.downloadMedia(media, { outputFile: filePath })
     logWithTimestamp(`Медиа успешно загружено в файл: ${filePath}`, 'info')
   } catch (error) {
@@ -247,15 +244,13 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  // Определяем MIME-тип и размер файла
-  const mimeType = media.document?.mimeType || 'image/jpeg' // По умолчанию для фото
+  const mimeType = media.document?.mimeType || 'image/jpeg'
   logWithTimestamp(`MIME-тип медиа: ${mimeType}`, 'info')
 
   const fileSizeInBytes = media.document?.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
   logWithTimestamp(`Размер медиа: ${fileSizeInMB} MB`, 'info')
 
-  // Проверяем размер файла
   if (isFileTooLarge(filePath, 50)) {
     logWithTimestamp(
       'Медиа превышает лимит в 50 MB. Отправка пропущена.',
@@ -264,7 +259,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
-  // Определяем тип медиа: фото, видео, анимация, документ
   let mediaType = 'document'
   if (media.photo) {
     mediaType = 'photo'
@@ -277,7 +271,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     logWithTimestamp('Тип медиа — видео.', 'info')
   }
 
-  // Если медиа — видео, обрабатываем отдельно с возможной конвертацией
   let convertedVideoPath = null
   if (mediaType === 'video') {
     const videoAttributes = media.document?.attributes?.find(
@@ -327,14 +320,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       }
     } else {
       logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.', 'info')
-      await sendMedia(chatId, filePath, 'video', message, ctx)
+      await sendMedia(chatId, filePath, 'video', message, ctx, true)
     }
   } else {
-    // Отправляем фото, анимацию или документ без дополнительной обработки
     await sendMedia(chatId, filePath, mediaType, message, ctx)
   }
 
-  // Удаляем временные файлы после отправки
   deleteFile(filePath)
   if (convertedVideoPath) deleteFile(convertedVideoPath)
 }

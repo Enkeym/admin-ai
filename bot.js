@@ -137,16 +137,6 @@ bot.command('start', (ctx) => {
   ctx.reply(startMessage)
 })
 
-// Функция для остановки текущего процесса
-async function stopCurrentProcess(ctx) {
-  if (currentProcess) {
-    await currentProcess()
-    await ctx.reply('Текущий процесс был остановлен.')
-    currentProcess = null
-    clearState()
-  }
-}
-
 // Обработка неизвестных команд и обычного текста
 bot.on('text', (ctx) => {
   const messageText = ctx.message.text
