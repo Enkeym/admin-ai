@@ -79,22 +79,6 @@ export async function validateChannelOrGroup(channelId, ctx) {
 
 // --- Обработка медиа и текстов ---
 
-// Удаление файла
-export function deleteFile(filePath) {
-  if (filePath && fs.existsSync(filePath)) {
-    fs.unlink(filePath, (err) => {
-      if (err) {
-        logWithTimestamp(
-          `Не удалось удалить файл: ${filePath} - ${err.message}`,
-          'error'
-        )
-      } else {
-        logWithTimestamp(`Файл удален: ${filePath}`, 'info')
-      }
-    })
-  }
-}
-
 // Асинхронная отправка текстовых сообщений
 export async function sendMessageToChat(chatId, message, ctx) {
   if (!message?.message?.trim()) {
@@ -128,7 +112,83 @@ export async function sendTextMessage(chatId, message, ctx) {
   }
 }
 
-// Отправка медиафайлов
+// Удаление файла
+export function deleteFile(filePath) {
+  if (filePath && fs.existsSync(filePath)) {
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        logWithTimestamp(
+          `Не удалось удалить файл: ${filePath} - ${err.message}`,
+          'error'
+        )
+      } else {
+        logWithTimestamp(`Файл удален: ${filePath}`, 'info')
+      }
+    })
+  }
+}
+
+// --- Функции для работы с видео и аудио ---
+
+// Функция для проверки кодеков видео и аудио
+function checkVideoCompatibility(inputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, (err, metadata) => {
+      if (err) {
+        logWithTimestamp(`Ошибка анализа видео: ${err.message}`, 'error')
+        return reject(err)
+      }
+
+      // Извлекаем информацию о кодеках
+      const videoCodec = metadata.streams.find(
+        (stream) => stream.codec_type === 'video'
+      )?.codec_name
+      const audioCodec = metadata.streams.find(
+        (stream) => stream.codec_type === 'audio'
+      )?.codec_name
+
+      logWithTimestamp(
+        `Кодеки видео: ${videoCodec || 'не найден'}, аудио: ${
+          audioCodec || 'не найден'
+        }`,
+        'info'
+      )
+
+      // Проверяем на совместимость с H.264 и AAC
+      if (videoCodec === 'h264' && audioCodec === 'aac') {
+        resolve(true) // Совместимость подтверждена
+      } else {
+        resolve(false) // Необходима конвертация
+      }
+    })
+  })
+}
+
+// Конвертация видео с поддержкой стриминга
+async function convertVideoForStreaming(inputPath, outputPath, width, height) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions('-vf', `scale=${width}:${height}`) // Масштабирование
+      .videoCodec('libx264') // Кодек H.264 для видео
+      .audioCodec('aac') // Кодек AAC для аудио
+      .outputOptions('-preset', 'fast') // Быстрая обработка
+      .outputOptions('-movflags', 'frag_keyframe+empty_moov') // Фрагментация для стриминга
+      .on('end', () => {
+        logWithTimestamp(
+          `Видео успешно преобразовано для стриминга: ${outputPath}`,
+          'info'
+        )
+        resolve(outputPath)
+      })
+      .on('error', (err) => {
+        logWithTimestamp(`Ошибка преобразования видео: ${err.message}`, 'error')
+        reject(err)
+      })
+      .save(outputPath)
+  })
+}
+
+// Отправка медиафайлов с поддержкой стриминга
 async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
   const mediaOptions = { caption: message.message }
   try {
@@ -145,7 +205,7 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
           { source: mediaPath },
           {
             ...mediaOptions,
-            supports_streaming: true,
+            supports_streaming: true, // Поддержка стриминга
             width,
             height
           }
@@ -180,26 +240,6 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
   }
 }
 
-// Конвертация видео через fluent-ffmpeg
-async function convertVideo(inputPath, outputPath, width, height) {
-  return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .outputOptions('-vf', `scale=${width}:${height}`)
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .outputOptions('-movflags', '+faststart')
-      .on('end', () => {
-        logWithTimestamp(`Видео успешно преобразовано: ${outputPath}`, 'info')
-        resolve(outputPath)
-      })
-      .on('error', (err) => {
-        logWithTimestamp(`Ошибка преобразования видео: ${err.message}`, 'error')
-        reject(err)
-      })
-      .save(outputPath)
-  })
-}
-
 // Проверка размера файла
 function isFileTooLarge(filePath, maxSizeMB) {
   const stats = fs.statSync(filePath)
@@ -207,7 +247,7 @@ function isFileTooLarge(filePath, maxSizeMB) {
   return fileSizeInMB > maxSizeMB
 }
 
-// Асинхронная загрузка и отправка медиа
+// --- Основная функция для загрузки и отправки медиа ---
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message || !message.message?.trim()) {
     logWithTimestamp(
@@ -284,13 +324,11 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       'info'
     )
 
-    if (
-      ['video/quicktime', 'video/x-msvideo', 'video/x-matroska'].includes(
-        mimeType
-      )
-    ) {
+    const isCompatible = await checkVideoCompatibility(filePath)
+
+    if (!isCompatible) {
       logWithTimestamp(
-        `Видео в формате ${mimeType}, требуется конвертация в MP4.`,
+        `Видео не совместимо с H.264 и AAC, требуется конвертация.`,
         'info'
       )
       convertedVideoPath = path.resolve(
@@ -299,7 +337,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       )
 
       try {
-        await convertVideo(filePath, convertedVideoPath, width, height)
+        await convertVideoForStreaming(
+          filePath,
+          convertedVideoPath,
+          width,
+          height
+        )
 
         if (isFileTooLarge(convertedVideoPath, 50)) {
           logWithTimestamp(
@@ -319,8 +362,8 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
         )
       }
     } else {
-      logWithTimestamp('Видео уже в формате MP4, отправляем оригинал.', 'info')
-      await sendMedia(chatId, filePath, 'video', message, ctx, true)
+      logWithTimestamp('Видео совместимо, отправляем оригинал.', 'info')
+      await sendMedia(chatId, filePath, 'video', message, ctx)
     }
   } else {
     await sendMedia(chatId, filePath, mediaType, message, ctx)
