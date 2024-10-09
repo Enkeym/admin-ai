@@ -92,24 +92,29 @@ bot.command('sum', async (ctx) => {
     let messages = await getUnreadMessages(channelId, count, ctx)
     if (Array.isArray(messages) && messages.length > 0) {
       messages = messages.reverse()
-      await Promise.all(
-        messages.map((message, i) => {
-          return new Promise((resolve) => {
-            setTimeout(async () => {
-              if (message.media) {
-                await downloadAndSendMedia(myGroup, message, ctx)
-              } else {
-                console.log('Медиа не найдено, отправка текстового сообщения')
-                await bot.telegram.sendMessage(myGroup, message.message)
-              }
-              resolve()
-            }, i * interval * 1000)
+
+      currentProcess = async () => {
+        await Promise.all(
+          messages.map((message, i) => {
+            return new Promise((resolve) => {
+              setTimeout(async () => {
+                if (message.media) {
+                  await downloadAndSendMedia(myGroup, message, ctx)
+                } else {
+                  console.log('Медиа не найдено, отправка текстового сообщения')
+                  await bot.telegram.sendMessage(myGroup, message.message)
+                }
+                resolve()
+              }, i * interval * 1000)
+            })
           })
-        })
-      )
+        )
+      }
+
+      await currentProcess()
       ctx.reply('Все сообщения отправлены.')
     } else {
-      ctx.reply('Непрочитанных сообщений не найдено')
+      ctx.reply('Непрочитанных сообщений не найдено.')
     }
   } catch (error) {
     console.error('Ошибка в процессе /sum:', error)
@@ -132,11 +137,15 @@ bot.command('start', (ctx) => {
   ctx.reply(startMessage)
 })
 
-// Команда для остановки текущего процесса
-bot.command('stop', async (ctx) => {
-  await stopCurrentProcess(ctx)
-  ctx.reply('Процесс был остановлен.')
-})
+// Функция для остановки текущего процесса
+async function stopCurrentProcess(ctx) {
+  if (currentProcess) {
+    await currentProcess()
+    await ctx.reply('Текущий процесс был остановлен.')
+    currentProcess = null
+    clearState()
+  }
+}
 
 // Обработка неизвестных команд и обычного текста
 bot.on('text', (ctx) => {
