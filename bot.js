@@ -122,6 +122,18 @@ bot.command('sum', async (ctx) => {
   }
 })
 
+// Команда для остановки текущего процесса
+bot.command('stop', async (ctx) => {
+  if (currentProcess) {
+    await currentProcess()
+    await ctx.reply('Текущий процесс был остановлен.')
+    currentProcess = null
+    clearState()
+  } else {
+    await ctx.reply('Нет активных процессов для остановки.')
+  }
+})
+
 // Приветственное сообщение бота
 bot.command('start', (ctx) => {
   const startMessage = `
