@@ -1,3 +1,5 @@
+import ffmpegStatic from '@ffmpeg-installer/ffmpeg'
+import ffprobeStatic from '@ffprobe-installer/ffprobe'
 import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs'
 import path from 'path'
@@ -11,6 +13,10 @@ import { containsAiErrorMessage } from './utils/aiChecker.js'
 import { containsAdContent } from './utils/filterChecker.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
+
+// Установите пути для ffmpeg и ffprobe
+ffmpeg.setFfmpegPath(ffmpegStatic.path)
+ffmpeg.setFfprobePath(ffprobeStatic.path)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -147,8 +153,9 @@ function checkVideoCompatibility(inputPath) {
         (stream) => stream.codec_type === 'audio'
       )?.codec_name
 
+      // Логирование кодеков
       logWithTimestamp(
-        `Кодеки видео: ${videoCodec || 'не найден'}, аудио: ${
+        `Проверка кодеков: видео - ${videoCodec || 'не найден'}, аудио - ${
           audioCodec || 'не найден'
         }`,
         'info'
@@ -156,9 +163,14 @@ function checkVideoCompatibility(inputPath) {
 
       // Проверяем на совместимость с H.264 и AAC
       if (videoCodec === 'h264' && audioCodec === 'aac') {
-        resolve(true) // Совместимость подтверждена
+        logWithTimestamp('Видео совместимо с H.264 и AAC', 'info')
+        resolve(true) // Совместимо
       } else {
-        resolve(false) // Необходима конвертация
+        logWithTimestamp(
+          'Видео НЕ совместимо с H.264 и AAC, требуется конвертация',
+          'warn'
+        )
+        resolve(false) // Требуется конвертация
       }
     })
   })
@@ -168,11 +180,11 @@ function checkVideoCompatibility(inputPath) {
 async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
-      .outputOptions('-vf', `scale=${width}:${height}`) // Масштабирование
-      .videoCodec('libx264') // Кодек H.264 для видео
-      .audioCodec('aac') // Кодек AAC для аудио
-      .outputOptions('-preset', 'fast') // Быстрая обработка
-      .outputOptions('-movflags', 'frag_keyframe+empty_moov') // Фрагментация для стриминга
+      .outputOptions('-vf', `scale=${width}:${height}`)
+      .videoCodec('libx264')
+      .audioCodec('aac')
+      .outputOptions('-preset', 'fast')
+      .outputOptions('-movflags', 'frag_keyframe+empty_moov')
       .on('end', () => {
         logWithTimestamp(
           `Видео успешно преобразовано для стриминга: ${outputPath}`,
@@ -205,7 +217,7 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
           { source: mediaPath },
           {
             ...mediaOptions,
-            supports_streaming: true, // Поддержка стриминга
+            supports_streaming: true,
             width,
             height
           }
@@ -247,7 +259,7 @@ function isFileTooLarge(filePath, maxSizeMB) {
   return fileSizeInMB > maxSizeMB
 }
 
-// --- Основная функция для загрузки и отправки медиа ---
+// Основная функция для загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message || !message.message?.trim()) {
     logWithTimestamp(
@@ -324,6 +336,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
       'info'
     )
 
+    // Проверка совместимости с H.264 и AAC
     const isCompatible = await checkVideoCompatibility(filePath)
 
     if (!isCompatible) {
