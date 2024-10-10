@@ -18,6 +18,18 @@ import { getMediaFileExtension } from './utils/mediaUtils.js'
 ffmpeg.setFfmpegPath(ffmpegStatic.path)
 ffmpeg.setFfprobePath(ffprobeStatic.path)
 
+// Вывести пути для отладки
+logWithTimestamp(`Путь к ffmpeg: ${ffmpegStatic.path}`, 'info')
+logWithTimestamp(`Путь к ffprobe: ${ffprobeStatic.path}`, 'info')
+
+// Проверка существования файла ffprobe
+if (!fs.existsSync(ffprobeStatic.path)) {
+  logWithTimestamp(
+    `Ошибка: ffprobe не найден по пути: ${ffprobeStatic.path}`,
+    'error'
+  )
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -136,8 +148,8 @@ export function deleteFile(filePath) {
 
 // --- Функции для работы с видео и аудио ---
 
-// Функция для проверки кодеков видео и аудио
-function checkVideoCompatibility(inputPath) {
+// Проверка кодеков видео и аудио для H.264 и AAC
+async function checkVideoCompatibility(inputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(inputPath, (err, metadata) => {
       if (err) {
@@ -145,7 +157,6 @@ function checkVideoCompatibility(inputPath) {
         return reject(err)
       }
 
-      // Извлекаем информацию о кодеках
       const videoCodec = metadata.streams.find(
         (stream) => stream.codec_type === 'video'
       )?.codec_name
@@ -153,7 +164,6 @@ function checkVideoCompatibility(inputPath) {
         (stream) => stream.codec_type === 'audio'
       )?.codec_name
 
-      // Логирование кодеков
       logWithTimestamp(
         `Проверка кодеков: видео - ${videoCodec || 'не найден'}, аудио - ${
           audioCodec || 'не найден'
@@ -164,13 +174,13 @@ function checkVideoCompatibility(inputPath) {
       // Проверяем на совместимость с H.264 и AAC
       if (videoCodec === 'h264' && audioCodec === 'aac') {
         logWithTimestamp('Видео совместимо с H.264 и AAC', 'info')
-        resolve(true) // Совместимо
+        resolve(true)
       } else {
         logWithTimestamp(
           'Видео НЕ совместимо с H.264 и AAC, требуется конвертация',
           'warn'
         )
-        resolve(false) // Требуется конвертация
+        resolve(false)
       }
     })
   })
