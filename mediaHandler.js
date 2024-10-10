@@ -1,6 +1,5 @@
 import ffmpegStatic from '@ffmpeg-installer/ffmpeg'
 import ffprobeStatic from '@ffprobe-installer/ffprobe'
-import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs'
 import path from 'path'
 import { NewMessage } from 'telegram/events/NewMessage.js'
@@ -14,9 +13,8 @@ import { containsAdContent } from './utils/filterChecker.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
 
-// Установите пути для ffmpeg и ffprobe
-ffmpeg.setFfmpegPath(ffmpegStatic.path)
-ffmpeg.setFfprobePath(ffprobeStatic.path)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Вывести пути для отладки
 logWithTimestamp(`Путь к ffmpeg: ${ffmpegStatic.path}`, 'info')
@@ -29,10 +27,6 @@ if (!fs.existsSync(ffprobeStatic.path)) {
     'error'
   )
 }
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
@@ -148,15 +142,17 @@ export function deleteFile(filePath) {
 
 // --- Функции для работы с видео и аудио ---
 
-// Проверка кодеков видео и аудио для H.264 и AAC
+// --- Проверка кодеков с помощью ffprobe ---
 async function checkVideoCompatibility(inputPath) {
   return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(inputPath, (err, metadata) => {
-      if (err) {
-        logWithTimestamp(`Ошибка анализа видео: ${err.message}`, 'error')
-        return reject(err)
+    const command = `${ffprobeStatic.path} -v error -show_streams -select_streams v:0,a:0 -print_format json ${inputPath}`
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        logWithTimestamp(`Ошибка анализа видео: ${stderr}`, 'error')
+        return reject(error)
       }
 
+      const metadata = JSON.parse(stdout)
       const videoCodec = metadata.streams.find(
         (stream) => stream.codec_type === 'video'
       )?.codec_name
@@ -171,7 +167,6 @@ async function checkVideoCompatibility(inputPath) {
         'info'
       )
 
-      // Проверяем на совместимость с H.264 и AAC
       if (videoCodec === 'h264' && audioCodec === 'aac') {
         logWithTimestamp('Видео совместимо с H.264 и AAC', 'info')
         resolve(true)
@@ -186,31 +181,25 @@ async function checkVideoCompatibility(inputPath) {
   })
 }
 
-// Конвертация видео с поддержкой стриминга
+// --- Конвертация видео с помощью ffmpeg ---
 async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .outputOptions('-vf', `scale=${width}:${height}`)
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .outputOptions('-preset', 'fast')
-      .outputOptions('-movflags', 'frag_keyframe+empty_moov')
-      .on('end', () => {
-        logWithTimestamp(
-          `Видео успешно преобразовано для стриминга: ${outputPath}`,
-          'info'
-        )
-        resolve(outputPath)
-      })
-      .on('error', (err) => {
-        logWithTimestamp(`Ошибка преобразования видео: ${err.message}`, 'error')
-        reject(err)
-      })
-      .save(outputPath)
+    const command = `${ffmpegStatic.path} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -preset fast -movflags +frag_keyframe+empty_moov ${outputPath}`
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        logWithTimestamp(`Ошибка конвертации видео: ${stderr}`, 'error')
+        return reject(error)
+      }
+      logWithTimestamp(
+        `Видео успешно конвертировано для стриминга: ${outputPath}`,
+        'info'
+      )
+      resolve(outputPath)
+    })
   })
 }
 
-// Отправка медиафайлов с поддержкой стриминга
+// --- Отправка медиа с поддержкой стриминга ---
 async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
   const mediaOptions = { caption: message.message }
   try {
@@ -225,12 +214,7 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
         await bot.telegram.sendVideo(
           chatId,
           { source: mediaPath },
-          {
-            ...mediaOptions,
-            supports_streaming: true,
-            width,
-            height
-          }
+          { ...mediaOptions, supports_streaming: true, width, height }
         )
         break
       }
