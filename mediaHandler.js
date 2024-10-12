@@ -29,9 +29,11 @@ logWithTimestamp(`Путь к ffmpeg: ${ffmpegPath}`, 'info')
 logWithTimestamp(`Путь к ffprobe: ${ffprobePath}`, 'info')
 
 // Проверка существования файлов ffmpeg и ffprobe
+
 if (!fs.existsSync(ffmpegPath)) {
   logWithTimestamp(`Ошибка: ffmpeg не найден по пути: ${ffmpegPath}`, 'error')
 }
+
 if (!fs.existsSync(ffprobePath)) {
   logWithTimestamp(`Ошибка: ffprobe не найден по пути: ${ffprobePath}`, 'error')
 }
