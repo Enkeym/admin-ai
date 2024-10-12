@@ -12,6 +12,7 @@ import { containsAdContent } from './utils/filterChecker.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
 
+// Установка путей к ffmpeg и ffprobe
 const ffmpegPath =
   process.platform === 'win32'
     ? 'C:\\ffmpeg\\bin\\ffmpeg.exe'
@@ -29,14 +30,23 @@ logWithTimestamp(`Путь к ffmpeg: ${ffmpegPath}`, 'info')
 logWithTimestamp(`Путь к ffprobe: ${ffprobePath}`, 'info')
 
 // Проверка существования файлов ffmpeg и ffprobe
-
 if (!fs.existsSync(ffmpegPath)) {
   logWithTimestamp(`Ошибка: ffmpeg не найден по пути: ${ffmpegPath}`, 'error')
 }
-
 if (!fs.existsSync(ffprobePath)) {
   logWithTimestamp(`Ошибка: ffprobe не найден по пути: ${ffprobePath}`, 'error')
 }
+
+// Дополнительная проверка с использованием команды which для проверки путей во время выполнения
+exec('which ffprobe', (error, stdout, stderr) => {
+  logWithTimestamp(
+    `Путь к ffprobe, найденный во время выполнения: ${stdout}`,
+    'info'
+  )
+  if (error) {
+    logWithTimestamp(`Ошибка поиска ffprobe: ${stderr}`, 'error')
+  }
+})
 
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
@@ -137,10 +147,12 @@ export function deleteFile(filePath) {
 
 // --- Конвертация видео ---
 
-// Функция для конвертации видео с поддержкой стриминга
+// Функция конвертации видео с использованием ffmpeg
 async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
     const command = `${ffmpegPath} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -b:v 1M -pix_fmt yuv420p -movflags +faststart -g 60 -vsync 0 -f mp4 ${outputPath}`
+    logWithTimestamp(`Выполняем команду конвертации видео: ${command}`, 'info')
+
     exec(command, (error, stdout, stderr) => {
       if (error) {
         logWithTimestamp(`Ошибка конвертации видео: ${stderr}`, 'error')
@@ -155,7 +167,7 @@ async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   })
 }
 
-// --- Отправка медиа с поддержкой стриминга ---
+// Функция отправки медиа с поддержкой стриминга
 async function sendMedia(
   chatId,
   mediaPath,
@@ -227,7 +239,7 @@ function isFileTooLarge(filePath, maxSizeMB) {
   return fileSizeInMB > maxSizeMB
 }
 
-// Основная функция для загрузки и отправки медиа
+// Функция загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message || !message.message?.trim()) {
     logWithTimestamp(
