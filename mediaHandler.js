@@ -25,10 +25,6 @@ const ffprobePath =
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Вывести пути для отладки
-logWithTimestamp(`Путь к ffmpeg: ${ffmpegPath}`, 'info')
-logWithTimestamp(`Путь к ffprobe: ${ffprobePath}`, 'info')
-
 // Проверка существования файлов ffmpeg и ffprobe
 if (!fs.existsSync(ffmpegPath)) {
   logWithTimestamp(`Ошибка: ffmpeg не найден по пути: ${ffmpegPath}`, 'error')
@@ -36,17 +32,6 @@ if (!fs.existsSync(ffmpegPath)) {
 if (!fs.existsSync(ffprobePath)) {
   logWithTimestamp(`Ошибка: ffprobe не найден по пути: ${ffprobePath}`, 'error')
 }
-
-// Дополнительная проверка с использованием команды which для проверки путей во время выполнения
-exec('which ffprobe', (error, stdout, stderr) => {
-  logWithTimestamp(
-    `Путь к ffprobe, найденный во время выполнения: ${stdout}`,
-    'info'
-  )
-  if (error) {
-    logWithTimestamp(`Ошибка поиска ffprobe: ${stderr}`, 'error')
-  }
-})
 
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
@@ -151,7 +136,6 @@ export function deleteFile(filePath) {
 async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
     const command = `${ffmpegPath} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -b:v 1M -pix_fmt yuv420p -movflags +faststart -g 60 -vsync 0 -f mp4 ${outputPath}`
-    logWithTimestamp(`Выполняем команду конвертации видео: ${command}`, 'info')
 
     exec(command, (error, stdout, stderr) => {
       if (error) {
@@ -224,8 +208,6 @@ async function sendMedia(
           mediaOptions
         )
     }
-
-    logWithTimestamp('Медиа успешно отправлено.', 'info')
   } catch (error) {
     logWithTimestamp(`Ошибка при отправке медиа: ${error.message}`, 'error')
     if (ctx) await ctx.reply('Ошибка при отправке медиа.')
