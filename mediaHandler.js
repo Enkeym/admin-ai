@@ -1,5 +1,3 @@
-import ffmpegStatic from '@ffmpeg-installer/ffmpeg'
-import ffprobeStatic from '@ffprobe-installer/ffprobe'
 import { exec } from 'child_process'
 import fs from 'fs'
 import path from 'path'
@@ -14,19 +12,28 @@ import { containsAdContent } from './utils/filterChecker.js'
 import { logWithTimestamp } from './utils/logger.js'
 import { getMediaFileExtension } from './utils/mediaUtils.js'
 
+const ffmpegPath =
+  process.platform === 'win32'
+    ? 'C:\\ffmpeg\\bin\\ffmpeg.exe'
+    : '/usr/bin/ffmpeg'
+const ffprobePath =
+  process.platform === 'win32'
+    ? 'C:\\ffmpeg\\bin\\ffprobe.exe'
+    : '/usr/bin/ffprobe'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Вывести пути для отладки
-logWithTimestamp(`Путь к ffmpeg: ${ffmpegStatic.path}`, 'info')
-logWithTimestamp(`Путь к ffprobe: ${ffprobeStatic.path}`, 'info')
+logWithTimestamp(`Путь к ffmpeg: ${ffmpegPath}`, 'info')
+logWithTimestamp(`Путь к ffprobe: ${ffprobePath}`, 'info')
 
-// Проверка существования файла ffprobe
-if (!fs.existsSync(ffprobeStatic.path)) {
-  logWithTimestamp(
-    `Ошибка: ffprobe не найден по пути: ${ffprobeStatic.path}`,
-    'error'
-  )
+// Проверка существования файлов ffmpeg и ffprobe
+if (!fs.existsSync(ffmpegPath)) {
+  logWithTimestamp(`Ошибка: ffmpeg не найден по пути: ${ffmpegPath}`, 'error')
+}
+if (!fs.existsSync(ffprobePath)) {
+  logWithTimestamp(`Ошибка: ffprobe не найден по пути: ${ffprobePath}`, 'error')
 }
 
 const chatAccessCache = new Map()
@@ -36,7 +43,7 @@ const foundChannelsCache = new Set()
 export function clearCache() {
   chatAccessCache.clear()
   foundChannelsCache.clear()
-  logWithTimestamp('Очищаем предыдущий кеш...', 'info')
+  logWithTimestamp('Кэш очищен.', 'info')
 }
 
 // Проверка доступа к чату с кэшированием
@@ -78,7 +85,7 @@ export async function validateChannelOrGroup(channelId, ctx) {
     const chat = await client.getEntity(channelId)
     foundChannelsCache.add(channelId)
     logWithTimestamp(
-      `Канал/группа с ID ${channelId} успешно найден и добавлен в кеш.`,
+      `Канал/группа с ID ${channelId} успешно найдены и добавлены в кеш.`,
       'info'
     )
     return chat
@@ -96,7 +103,7 @@ export async function validateChannelOrGroup(channelId, ctx) {
 // Асинхронная отправка текстовых сообщений
 export async function sendMessageToChat(chatId, message, ctx) {
   if (!message?.message?.trim()) {
-    logWithTimestamp('Сообщение пустое или undefined.', 'warn')
+    logWithTimestamp('Сообщение пустое или отсутствует.', 'warn')
     if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
     return
   }
@@ -126,52 +133,12 @@ export function deleteFile(filePath) {
   }
 }
 
-/* // --- Проверка кодеков с помощью ffprobe ---
-async function checkVideoCompatibility(inputPath) {
-  return new Promise((resolve, reject) => {
-    const command = `${ffprobeStatic.path} -v error -show_streams -print_format json ${inputPath}`
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        logWithTimestamp(`Ошибка анализа видео: ${stderr}`, 'error')
-        return reject(error)
-      }
-
-      const metadata = JSON.parse(stdout)
-      const videoStream = metadata.streams.find(
-        (stream) => stream.codec_type === 'video'
-      )
-      const audioStream = metadata.streams.find(
-        (stream) => stream.codec_type === 'audio'
-      )
-
-      const videoCodec = videoStream?.codec_name
-      const audioCodec = audioStream?.codec_name
-
-      logWithTimestamp(
-        `Проверка кодеков: видео - ${videoCodec || 'не найден'}, аудио - ${
-          audioCodec || 'не найден'
-        }`,
-        'info'
-      )
-
-      if (videoCodec === 'h264' && audioCodec === 'aac') {
-        logWithTimestamp('Видео совместимо с H.264 и AAC', 'info')
-        resolve(true)
-      } else {
-        logWithTimestamp(
-          'Видео НЕ совместимо с H.264 и AAC, требуется конвертация',
-          'warn'
-        )
-        resolve(false)
-      }
-    })
-  })
-} */
+// --- Конвертация видео ---
 
 // Функция для конвертации видео с поддержкой стриминга
 async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
-    const command = `${ffmpegStatic.path} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -b:v 1M -pix_fmt yuv420p -movflags +faststart -g 60 -vsync 0 -f mp4 ${outputPath}`
+    const command = `${ffmpegPath} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -b:v 1M -pix_fmt yuv420p -movflags +faststart -g 60 -vsync 0 -f mp4 ${outputPath}`
     exec(command, (error, stdout, stderr) => {
       if (error) {
         logWithTimestamp(`Ошибка конвертации видео: ${stderr}`, 'error')
@@ -261,12 +228,15 @@ function isFileTooLarge(filePath, maxSizeMB) {
 // Основная функция для загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message || !message.message?.trim()) {
-    logWithTimestamp('Message has no text, skipping media sending.', 'warn')
+    logWithTimestamp(
+      'Сообщение не содержит текста, пропуск отправки медиа.',
+      'warn'
+    )
     return
   }
 
   if (!(await checkChatAccess(chatId))) {
-    const errorMsg = `Bot does not have access to chat ID ${chatId}. Skipping media.`
+    const errorMsg = `Бот не имеет доступа к чату с ID ${chatId}. Пропуск отправки медиа.`
     logWithTimestamp(errorMsg, 'error')
     return
   }
@@ -276,47 +246,44 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     !media ||
     (!media.document && !media.photo && !media.animation && !media.video)
   ) {
-    logWithTimestamp('No media or document in message.', 'warn')
+    logWithTimestamp('Медиа или документ в сообщении отсутствуют.', 'warn')
     return
   }
 
   const fileExtension = getMediaFileExtension(media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
-  logWithTimestamp(`Saving media at path: ${filePath}`, 'info')
+  logWithTimestamp(`Сохранение медиа в файл по пути: ${filePath}`, 'info')
 
   try {
     await client.downloadMedia(media, { outputFile: filePath })
-    logWithTimestamp(
-      `Media successfully downloaded to file: ${filePath}`,
-      'info'
-    )
+    logWithTimestamp(`Медиа успешно загружено в файл: ${filePath}`, 'info')
   } catch (error) {
-    logWithTimestamp(`Error downloading media: ${error.message}`, 'error')
+    logWithTimestamp(`Ошибка загрузки медиа: ${error.message}`, 'error')
     return
   }
 
   const mimeType = media.document?.mimeType || 'image/jpeg'
-  logWithTimestamp(`Media MIME type: ${mimeType}`, 'info')
+  logWithTimestamp(`MIME тип медиа: ${mimeType}`, 'info')
 
   const fileSizeInBytes = media.document?.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
-  logWithTimestamp(`Media size: ${fileSizeInMB} MB`, 'info')
+  logWithTimestamp(`Размер медиа: ${fileSizeInMB} МБ`, 'info')
 
   if (isFileTooLarge(filePath, 50)) {
-    logWithTimestamp('Media exceeds 50 MB size limit. Skipping send.', 'warn')
+    logWithTimestamp('Медиа превышает лимит в 50 МБ. Пропуск отправки.', 'warn')
     return
   }
 
   let mediaType = 'document'
   if (media.photo) {
     mediaType = 'photo'
-    logWithTimestamp('Media type is photo.', 'info')
+    logWithTimestamp('Тип медиа: фото.', 'info')
   } else if (media.animation) {
     mediaType = 'animation'
-    logWithTimestamp('Media type is animation (GIF).', 'info')
+    logWithTimestamp('Тип медиа: анимация (GIF).', 'info')
   } else if (media.video) {
     mediaType = 'video'
-    logWithTimestamp('Media type is video.', 'info')
+    logWithTimestamp('Тип медиа: видео.', 'info')
   }
 
   let convertedVideoPath = null
@@ -328,7 +295,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     const height = videoAttributes?.h || 1080
 
     logWithTimestamp(
-      `Video dimensions: width ${width}px, height ${height}px`,
+      `Размеры видео: ширина ${width}px, высота ${height}px`,
       'info'
     )
 
@@ -345,7 +312,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
 
       if (isFileTooLarge(convertedVideoPath, 50)) {
         logWithTimestamp(
-          'Converted video exceeds 50 MB limit. Skipping send.',
+          'Конвертированное видео превышает лимит в 50 МБ. Пропуск отправки.',
           'warn'
         )
         deleteFile(convertedVideoPath)
@@ -363,9 +330,9 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
         width,
         height
       )
-      logWithTimestamp('Converted video sent successfully.', 'info')
+      logWithTimestamp('Конвертированное видео успешно отправлено.', 'info')
     } catch (error) {
-      logWithTimestamp(`Error converting video: ${error.message}`, 'error')
+      logWithTimestamp(`Ошибка конвертации видео: ${error.message}`, 'error')
     }
   } else {
     await sendMedia(chatId, filePath, mediaType, message, ctx)
