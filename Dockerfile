@@ -1,5 +1,5 @@
 # Строим проект в отдельном слое
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 
 WORKDIR /app
 
@@ -11,12 +11,12 @@ RUN yarn install --frozen-lockfile
 COPY . .
 
 # Устанавливаем ffmpeg и ffprobe в финальном образе
-FROM node:18-alpine
+FROM node:18-slim
 
 WORKDIR /app
 
 # Устанавливаем ffmpeg и ffprobe
-RUN apk update && apk add --no-cache ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg
 
 COPY --from=builder /app ./
 
