@@ -1,5 +1,6 @@
 import ffmpegStatic from '@ffmpeg-installer/ffmpeg'
 import ffprobeStatic from '@ffprobe-installer/ffprobe'
+import { exec } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { NewMessage } from 'telegram/events/NewMessage.js'
@@ -27,6 +28,7 @@ if (!fs.existsSync(ffprobeStatic.path)) {
     'error'
   )
 }
+
 const chatAccessCache = new Map()
 const foundChannelsCache = new Set()
 
@@ -108,22 +110,6 @@ export async function sendMessageToChat(chatId, message, ctx) {
   }
 }
 
-// Асинхронная отправка текстовых сообщений
-export async function sendTextMessage(chatId, message, ctx) {
-  if (!message?.message?.trim()) {
-    logWithTimestamp('Сообщение пустое или undefined.', 'warn')
-    if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
-    return
-  }
-  try {
-    await bot.telegram.sendMessage(chatId, message.message)
-    logWithTimestamp('Сообщение успешно отправлено.', 'info')
-  } catch (error) {
-    logWithTimestamp(`Ошибка при отправке текста: ${error.message}`, 'error')
-    if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
-  }
-}
-
 // Удаление файла
 export function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
@@ -140,12 +126,10 @@ export function deleteFile(filePath) {
   }
 }
 
-// --- Функции для работы с видео и аудио ---
-
-// --- Проверка кодеков с помощью ffprobe ---
+/* // --- Проверка кодеков с помощью ffprobe ---
 async function checkVideoCompatibility(inputPath) {
   return new Promise((resolve, reject) => {
-    const command = `${ffprobeStatic.path} -v error -show_streams -select_streams v:0,a:0 -print_format json ${inputPath}`
+    const command = `${ffprobeStatic.path} -v error -show_streams -print_format json ${inputPath}`
     exec(command, (error, stdout, stderr) => {
       if (error) {
         logWithTimestamp(`Ошибка анализа видео: ${stderr}`, 'error')
@@ -153,12 +137,15 @@ async function checkVideoCompatibility(inputPath) {
       }
 
       const metadata = JSON.parse(stdout)
-      const videoCodec = metadata.streams.find(
+      const videoStream = metadata.streams.find(
         (stream) => stream.codec_type === 'video'
-      )?.codec_name
-      const audioCodec = metadata.streams.find(
+      )
+      const audioStream = metadata.streams.find(
         (stream) => stream.codec_type === 'audio'
-      )?.codec_name
+      )
+
+      const videoCodec = videoStream?.codec_name
+      const audioCodec = audioStream?.codec_name
 
       logWithTimestamp(
         `Проверка кодеков: видео - ${videoCodec || 'не найден'}, аудио - ${
@@ -179,12 +166,12 @@ async function checkVideoCompatibility(inputPath) {
       }
     })
   })
-}
+} */
 
-// --- Конвертация видео с помощью ffmpeg ---
+// Функция для конвертации видео с поддержкой стриминга
 async function convertVideoForStreaming(inputPath, outputPath, width, height) {
   return new Promise((resolve, reject) => {
-    const command = `${ffmpegStatic.path} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -preset fast -movflags +frag_keyframe+empty_moov ${outputPath}`
+    const command = `${ffmpegStatic.path} -i ${inputPath} -vf "scale=${width}:${height}" -c:v libx264 -c:a aac -b:v 1M -pix_fmt yuv420p -movflags +faststart -g 60 -vsync 0 -f mp4 ${outputPath}`
     exec(command, (error, stdout, stderr) => {
       if (error) {
         logWithTimestamp(`Ошибка конвертации видео: ${stderr}`, 'error')
@@ -200,21 +187,38 @@ async function convertVideoForStreaming(inputPath, outputPath, width, height) {
 }
 
 // --- Отправка медиа с поддержкой стриминга ---
-async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
+async function sendMedia(
+  chatId,
+  mediaPath,
+  mediaType,
+  message,
+  ctx,
+  isConverted = false,
+  width = null,
+  height = null
+) {
   const mediaOptions = { caption: message.message }
+
   try {
     switch (mediaType) {
       case 'video': {
         const videoAttributes = message.media.document.attributes.find(
           (attr) => attr.className === 'DocumentAttributeVideo'
         )
-        const width = videoAttributes?.w || 720
-        const height = videoAttributes?.h || 1080
+
+        // Если видео было конвертировано, используем новые размеры
+        const videoWidth = isConverted ? width : videoAttributes?.w || 720
+        const videoHeight = isConverted ? height : videoAttributes?.h || 1080
 
         await bot.telegram.sendVideo(
           chatId,
           { source: mediaPath },
-          { ...mediaOptions, supports_streaming: true, width, height }
+          {
+            ...mediaOptions,
+            supports_streaming: true,
+            width: videoWidth,
+            height: videoHeight
+          }
         )
         break
       }
@@ -239,6 +243,7 @@ async function sendMedia(chatId, mediaPath, mediaType, message, ctx) {
           mediaOptions
         )
     }
+
     logWithTimestamp('Медиа успешно отправлено.', 'info')
   } catch (error) {
     logWithTimestamp(`Ошибка при отправке медиа: ${error.message}`, 'error')
@@ -256,15 +261,12 @@ function isFileTooLarge(filePath, maxSizeMB) {
 // Основная функция для загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
   if (!message || !message.message?.trim()) {
-    logWithTimestamp(
-      'Сообщение не содержит текста, медиа не будет отправлено.',
-      'warn'
-    )
+    logWithTimestamp('Message has no text, skipping media sending.', 'warn')
     return
   }
 
   if (!(await checkChatAccess(chatId))) {
-    const errorMsg = `Бот не имеет доступа к чату с ID ${chatId}. Медиа не отправлено.`
+    const errorMsg = `Bot does not have access to chat ID ${chatId}. Skipping media.`
     logWithTimestamp(errorMsg, 'error')
     return
   }
@@ -274,47 +276,47 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     !media ||
     (!media.document && !media.photo && !media.animation && !media.video)
   ) {
-    logWithTimestamp('Сообщение не содержит медиа или документ.', 'warn')
+    logWithTimestamp('No media or document in message.', 'warn')
     return
   }
 
   const fileExtension = getMediaFileExtension(media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
-  logWithTimestamp(`Путь для сохранения медиа: ${filePath}`, 'info')
+  logWithTimestamp(`Saving media at path: ${filePath}`, 'info')
 
   try {
     await client.downloadMedia(media, { outputFile: filePath })
-    logWithTimestamp(`Медиа успешно загружено в файл: ${filePath}`, 'info')
+    logWithTimestamp(
+      `Media successfully downloaded to file: ${filePath}`,
+      'info'
+    )
   } catch (error) {
-    logWithTimestamp(`Ошибка при скачивании медиа: ${error.message}`, 'error')
+    logWithTimestamp(`Error downloading media: ${error.message}`, 'error')
     return
   }
 
   const mimeType = media.document?.mimeType || 'image/jpeg'
-  logWithTimestamp(`MIME-тип медиа: ${mimeType}`, 'info')
+  logWithTimestamp(`Media MIME type: ${mimeType}`, 'info')
 
   const fileSizeInBytes = media.document?.size || 0
   const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
-  logWithTimestamp(`Размер медиа: ${fileSizeInMB} MB`, 'info')
+  logWithTimestamp(`Media size: ${fileSizeInMB} MB`, 'info')
 
   if (isFileTooLarge(filePath, 50)) {
-    logWithTimestamp(
-      'Медиа превышает лимит в 50 MB. Отправка пропущена.',
-      'warn'
-    )
+    logWithTimestamp('Media exceeds 50 MB size limit. Skipping send.', 'warn')
     return
   }
 
   let mediaType = 'document'
   if (media.photo) {
     mediaType = 'photo'
-    logWithTimestamp('Тип медиа — фото.', 'info')
+    logWithTimestamp('Media type is photo.', 'info')
   } else if (media.animation) {
     mediaType = 'animation'
-    logWithTimestamp('Тип медиа — анимация (GIF).', 'info')
+    logWithTimestamp('Media type is animation (GIF).', 'info')
   } else if (media.video) {
     mediaType = 'video'
-    logWithTimestamp('Тип медиа — видео.', 'info')
+    logWithTimestamp('Media type is video.', 'info')
   }
 
   let convertedVideoPath = null
@@ -326,51 +328,44 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     const height = videoAttributes?.h || 1080
 
     logWithTimestamp(
-      `Получены размеры видео: ширина ${width}px, высота ${height}px`,
+      `Video dimensions: width ${width}px, height ${height}px`,
       'info'
     )
 
-    // Проверка совместимости с H.264 и AAC
-    const isCompatible = await checkVideoCompatibility(filePath)
+    // Прямо конвертируем видео
+    convertedVideoPath = path.resolve(__dirname, `converted_${message.id}.mp4`)
 
-    if (!isCompatible) {
-      logWithTimestamp(
-        `Видео не совместимо с H.264 и AAC, требуется конвертация.`,
-        'info'
-      )
-      convertedVideoPath = path.resolve(
-        __dirname,
-        `converted_${message.id}.mp4`
+    try {
+      await convertVideoForStreaming(
+        filePath,
+        convertedVideoPath,
+        width,
+        height
       )
 
-      try {
-        await convertVideoForStreaming(
-          filePath,
-          convertedVideoPath,
-          width,
-          height
-        )
-
-        if (isFileTooLarge(convertedVideoPath, 50)) {
-          logWithTimestamp(
-            'Конвертированное видео превышает лимит в 50 MB. Отправка пропущена.',
-            'warn'
-          )
-          deleteFile(convertedVideoPath)
-          return
-        }
-
-        await sendMedia(chatId, convertedVideoPath, 'video', message, ctx)
-        logWithTimestamp('Видео успешно отправлено после конвертации.', 'info')
-      } catch (error) {
+      if (isFileTooLarge(convertedVideoPath, 50)) {
         logWithTimestamp(
-          `Ошибка преобразования видео: ${error.message}`,
-          'error'
+          'Converted video exceeds 50 MB limit. Skipping send.',
+          'warn'
         )
+        deleteFile(convertedVideoPath)
+        return
       }
-    } else {
-      logWithTimestamp('Видео совместимо, отправляем оригинал.', 'info')
-      await sendMedia(chatId, filePath, 'video', message, ctx)
+
+      // Отправляем конвертированное видео
+      await sendMedia(
+        chatId,
+        convertedVideoPath,
+        'video',
+        message,
+        ctx,
+        true,
+        width,
+        height
+      )
+      logWithTimestamp('Converted video sent successfully.', 'info')
+    } catch (error) {
+      logWithTimestamp(`Error converting video: ${error.message}`, 'error')
     }
   } else {
     await sendMedia(chatId, filePath, mediaType, message, ctx)

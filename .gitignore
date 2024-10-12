@@ -1,3 +1,4 @@
 node_modules
 nodemon.json
 state.json
+*.mp4
