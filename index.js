@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename)
 let currentProcess = null
 
 // Функция для безопасного подключения к Telegram с повторными попытками
-async function safeConnect(client, retries = 5, delay = 5000) {
+async function safeConnect(client, retries = 10, delay = 10000) {
   let attempt = 0
   while (attempt < retries) {
     try {
@@ -30,19 +30,17 @@ async function safeConnect(client, retries = 5, delay = 5000) {
       return
     } catch (error) {
       attempt++
-      if (error.code === -500 && attempt < retries) {
-        console.log(
-          `Попытка ${attempt} не удалась. Повторное подключение через ${
-            delay / 1000
-          } секунд...`
-        )
+      console.log(`Попытка ${attempt} не удалась: ${error.message}`)
+      if (attempt < retries) {
+        console.log(`Повторное подключение через ${delay / 1000} секунд...`)
         await new Promise((resolve) => setTimeout(resolve, delay))
       } else {
-        throw error
+        throw new Error(
+          'Не удалось подключиться к Telegram после нескольких попыток'
+        )
       }
     }
   }
-  throw new Error('Не удалось подключиться к Telegram после нескольких попыток')
 }
 
 async function restoreProcesses(state) {
