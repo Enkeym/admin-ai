@@ -97,23 +97,6 @@ export async function validateChannelOrGroup(channelId, ctx) {
 
 // --- Обработка медиа и текстов ---
 
-// Асинхронная отправка текстовых сообщений
-export async function sendMessageToChat(chatId, message, ctx) {
-  if (!message?.message?.trim()) {
-    logWithTimestamp('Сообщение пустое или отсутствует.', 'warn')
-    if (ctx) await ctx.reply('Сообщение пустое или не содержит текста.')
-    return
-  }
-
-  try {
-    await bot.telegram.sendMessage(chatId, message.message)
-    logWithTimestamp('Сообщение успешно отправлено.', 'info')
-  } catch (error) {
-    logWithTimestamp(`Ошибка при отправке текста: ${error.message}`, 'error')
-    if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
-  }
-}
-
 // Удаление файла
 export function deleteFile(filePath) {
   if (filePath && fs.existsSync(filePath)) {
@@ -223,11 +206,9 @@ function isFileTooLarge(filePath, maxSizeMB) {
 
 // Функция загрузки и отправки медиа
 export async function downloadAndSendMedia(chatId, message, ctx) {
-  if (!message || !message.message?.trim()) {
-    logWithTimestamp(
-      'Сообщение не содержит текста, пропуск отправки медиа.',
-      'warn'
-    )
+  // Убираем проверку на наличие текста для отправки медиа
+  if (!message.media) {
+    logWithTimestamp('Медиа или документ в сообщении отсутствуют.', 'warn')
     return
   }
 
@@ -238,13 +219,6 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   }
 
   const media = message.media
-  if (
-    !media ||
-    (!media.document && !media.photo && !media.animation && !media.video)
-  ) {
-    logWithTimestamp('Медиа или документ в сообщении отсутствуют.', 'warn')
-    return
-  }
 
   const fileExtension = getMediaFileExtension(media)
   const filePath = path.resolve(__dirname, `${message.id}.${fileExtension}`)
@@ -402,14 +376,32 @@ export async function watchNewMessages(channelIds, ctx) {
           return
         }
 
+        // Пропускаем сообщения, содержащие только текст
+        if (message?.message?.trim() && !message.media) {
+          logWithTimestamp(
+            'Сообщение содержит только текст без медиа. Пропуск...',
+            'warn'
+          )
+          return
+        }
+
         if (message.media) {
           await downloadAndSendMedia(myGroup, message, ctx)
-        } else if (message.message) {
+        } else if (message.message?.trim()) {
           logWithTimestamp(
             'Медиа не найдено, отправка текстового сообщения',
             'info'
           )
-          await sendMessageToChat(myGroup, { message: message.message }, ctx)
+          try {
+            await bot.telegram.sendMessage(myGroup, message.message)
+            logWithTimestamp('Сообщение успешно отправлено.', 'info')
+          } catch (error) {
+            logWithTimestamp(
+              `Ошибка при отправке сообщения: ${error.message}`,
+              'error'
+            )
+            if (ctx) await ctx.reply('Ошибка при отправке сообщения.')
+          }
         } else {
           logWithTimestamp(
             'Сообщение не содержит текста и не является медиа.',
@@ -461,10 +453,19 @@ export async function watchNewMessagesAi(channelIds, ctx) {
       try {
         const message = event.message
 
-        // Проверка на рекламное содержание (фильтр без ИИ)
+        // Проверяем на рекламное содержание
         if (containsAdContent(message.message)) {
           logWithTimestamp(
             'Сообщение классифицировано как реклама, пропуск...',
+            'warn'
+          )
+          return
+        }
+
+        // Пропускаем сообщения, содержащие только текст без медиа
+        if (message?.message?.trim() && !message.media) {
+          logWithTimestamp(
+            'Сообщение содержит только текст без медиа. Пропуск...',
             'warn'
           )
           return
@@ -479,42 +480,33 @@ export async function watchNewMessagesAi(channelIds, ctx) {
           return
         }
 
-        // Проверка на наличие медиа
+        // Если сообщение содержит медиа, отправляем его независимо от текста
         if (message.media) {
           logWithTimestamp(
             'Сообщение содержит медиа, передаем на обработку.',
             'info'
           )
           await downloadAndSendMedia(myGroup, message, ctx)
-        } else if (message.message) {
-          let processedMessage
-          try {
-            const result = await processMessageWithAi(message)
-            processedMessage = result.message
-            logWithTimestamp('Сообщение успешно обработано ИИ.', 'info')
-          } catch (error) {
-            logWithTimestamp(
-              `Ошибка при обработке сообщения ИИ: ${error.message}`,
-              'error'
-            )
-            return
-          }
+          return // Медиа обработано, возвращаемся
+        }
 
-          // Отправляем обработанное сообщение в чат
-          await sendMessageToChat(myGroup, { message: processedMessage }, ctx)
+        // Если сообщение содержит только текст, обрабатываем через ИИ
+        if (message.message?.trim()) {
+          logWithTimestamp('Обрабатываем текстовое сообщение через ИИ.', 'info')
+          const processedMessage = await processMessageWithAi(message)
+          logWithTimestamp('Сообщение успешно обработано ИИ.', 'info')
+          await bot.telegram.sendMessage(myGroup, processedMessage.message)
         } else {
           logWithTimestamp(
-            'Сообщение не содержит текста и не является медиа.',
+            'Сообщение не содержит текста или медиа, пропуск...',
             'warn'
           )
-          if (ctx) await ctx.reply('Сообщение пустое или не содержит медиа.')
         }
       } catch (error) {
         logWithTimestamp(
           `Ошибка при обработке нового сообщения: ${error.message}`,
           'error'
         )
-        if (ctx) ctx.reply('Ошибка при обработке нового сообщения.')
       }
     }
 
