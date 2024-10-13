@@ -212,6 +212,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
+  // Проверка на наличие текста в медиа. Если текста нет, то пропускаем сообщение
+  if (!message.message || message.message.trim() === '') {
+    logWithTimestamp('Медиа не содержит текста. Пропуск отправки.', 'warn')
+    return
+  }
+
   if (!(await checkChatAccess(chatId))) {
     const errorMsg = `Бот не имеет доступа к чату с ID ${chatId}. Пропуск отправки медиа.`
     logWithTimestamp(errorMsg, 'error')
