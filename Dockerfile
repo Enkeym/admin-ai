@@ -27,6 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Копируем результат сборки из предыдущего слоя
 COPY --from=builder /app .
 
+# Копируем файл .env внутрь контейнера
+COPY .env .env
+
 # Открываем порт для приложения
 EXPOSE 3000
 
