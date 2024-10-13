@@ -9,6 +9,7 @@ const colors = {
 export function containsAdContent(text) {
   const urlPattern = /https?:\/\/[^\s]+/g
   const mentionPattern = /@\w+/g
+  const hashtagPattern = /^#\w+/
   const subscriptionPattern =
     /подписаться|подпишитесь|подпишись|подписка|подпишем|акция|акции|акцион|скидка|скидки|скидочная|скидочной|скидочную|скидочный|выгода|выгодно|предложение|предложения|предложений|оферта|купить|покупка|покупки|приобрести|приобретение|заказ|заказы|заказать|закажем|доставка|доставить|доставки|доставим|доставим|продажа|продажи|продать|продаем|реализация|продается|предоставим|реализуем|выгодный|выгодная|выгодные|выгоднее|дешевле|дёшево|выгодней|со скидкой/i
   const callToActionPattern =
@@ -41,6 +42,15 @@ export function containsAdContent(text) {
   if (mentionMatch) {
     logWithTimestamp(
       `Сообщение заблокировано из-за упоминания аккаунта: "${colors.red}${mentionMatch[0]}${colors.reset}"`,
+      'info'
+    )
+    return true
+  }
+
+  // Проверка, начинается ли сообщение с #
+  if (hashtagPattern.test(text)) {
+    logWithTimestamp(
+      `Сообщение заблокировано из-за хештега: "${colors.red}${text}${colors.reset}"`,
       'info'
     )
     return true
