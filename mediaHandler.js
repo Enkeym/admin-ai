@@ -145,7 +145,9 @@ async function sendMedia(
   width = null,
   height = null
 ) {
-  const mediaOptions = { caption: message.message }
+  const MAX_CAPTION_LENGTH = 1024
+  const caption = message.message.slice(0, MAX_CAPTION_LENGTH)
+  const mediaOptions = { caption }
 
   try {
     switch (mediaType) {
@@ -193,7 +195,6 @@ async function sendMedia(
     }
   } catch (error) {
     logWithTimestamp(`Ошибка при отправке медиа: ${error.message}`, 'error')
-    if (ctx) await ctx.reply('Ошибка при отправке медиа.')
   }
 }
 
