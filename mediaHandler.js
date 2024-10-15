@@ -490,11 +490,19 @@ export async function watchNewMessagesAi(channelIds, ctx) {
         // Если сообщение содержит медиа, отправляем его независимо от текста
         if (message.media) {
           logWithTimestamp(
-            'Сообщение содержит медиа, передаем на обработку.',
+            'Сообщение содержит медиа, обрабатываем текст с ИИ перед отправкой...',
             'info'
           )
+
+          // Обрабатываем текст через ИИ перед отправкой медиа
+          const processedMessage = await processMessageWithAi(message)
+
+          // Заменяем текст в сообщении на результат обработки ИИ
+          message.message = processedMessage.message || message.message
+
+          // Теперь отправляем медиа с обработанным текстом
           await downloadAndSendMedia(myGroup, message, ctx)
-          return // Медиа обработано, возвращаемся
+          return // Медиа обработано и отправлено, выходим
         }
 
         // Если сообщение содержит только текст, обрабатываем через ИИ
