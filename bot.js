@@ -1,5 +1,5 @@
 import { Telegraf } from 'telegraf'
-import { myGroup, tgToken } from './config.js'
+import { myGroup, myId, tgToken } from './config.js'
 import {
   downloadAndSendMedia,
   getUnreadMessages,
@@ -11,6 +11,11 @@ import { clearState, updateState } from './stateManager.js'
 
 export const bot = new Telegraf(tgToken)
 let currentProcess = null
+
+// Функция для проверки владельца бота
+function isOwner(ctx) {
+  return ctx.from.id === parseInt(myId)
+}
 
 // Функция для остановки текущего процесса
 async function stopCurrentProcess(ctx) {
@@ -24,6 +29,10 @@ async function stopCurrentProcess(ctx) {
 
 // Команда для наблюдения за новыми сообщениями
 bot.command('watch', async (ctx) => {
+  if (!isOwner(ctx)) {
+    return ctx.reply('У вас нет прав для использования этой команды.')
+  }
+
   const args = ctx.message.text.split(' ').slice(1)
   if (args.length === 0) {
     return ctx.reply('Вы не указали ID каналов/групп')
@@ -49,6 +58,10 @@ bot.command('watch', async (ctx) => {
 
 // Команда для наблюдения за новыми сообщениями с обработкой AI
 bot.command('watchAi', async (ctx) => {
+  if (!isOwner(ctx)) {
+    return ctx.reply('У вас нет прав для использования этой команды.')
+  }
+
   const args = ctx.message.text.split(' ').slice(1)
   if (args.length === 0) {
     return ctx.reply('Вы не указали ID каналов/групп')
@@ -76,6 +89,10 @@ bot.command('watchAi', async (ctx) => {
 
 // Команда для получения непрочитанных сообщений
 bot.command('sum', async (ctx) => {
+  if (!isOwner(ctx)) {
+    return ctx.reply('У вас нет прав для использования этой команды.')
+  }
+
   const args = ctx.message.text.split(' ')
   const channelId = args[1]
   const count = parseInt(args[2], 10) || 1
@@ -124,6 +141,10 @@ bot.command('sum', async (ctx) => {
 
 // Команда для остановки текущего процесса
 bot.command('stop', async (ctx) => {
+  if (!isOwner(ctx)) {
+    return ctx.reply('У вас нет прав для использования этой команды.')
+  }
+
   if (currentProcess) {
     await currentProcess()
     await ctx.reply('Текущий процесс был остановлен.')
@@ -136,6 +157,10 @@ bot.command('stop', async (ctx) => {
 
 // Приветственное сообщение бота
 bot.command('start', (ctx) => {
+  if (!isOwner(ctx)) {
+    return ctx.reply('У вас нет прав для использования этой команды.')
+  }
+
   const startMessage = `
 Привет! Я бот, который может выполнять следующие действия:
 
