@@ -384,13 +384,13 @@ export async function watchNewMessages(channelIds, ctx) {
         }
 
         // Пропускаем сообщения, содержащие только текст
-        if (message?.message?.trim() && !message.media) {
+        /* if (message?.message?.trim() && !message.media) {
           logWithTimestamp(
             'Сообщение содержит только текст без медиа. Пропуск...',
             'warn'
           )
           return
-        }
+        } */
 
         if (message.media) {
           await downloadAndSendMedia(myGroup, message, ctx)
@@ -470,13 +470,13 @@ export async function watchNewMessagesAi(channelIds, ctx) {
         }
 
         // Пропускаем сообщения, содержащие только текст без медиа
-        if (message?.message?.trim() && !message.media) {
+        /* if (message?.message?.trim() && !message.media) {
           logWithTimestamp(
             'Сообщение содержит только текст без медиа. Пропуск...',
             'warn'
           )
           return
-        }
+        } */
 
         // Проверка на ошибки ИИ и чувствительное содержание
         if (containsAiErrorMessage(message.message)) {
@@ -494,15 +494,12 @@ export async function watchNewMessagesAi(channelIds, ctx) {
             'info'
           )
 
-          // Обрабатываем текст через ИИ перед отправкой медиа
           const processedMessage = await processMessageWithAi(message)
 
-          // Заменяем текст в сообщении на результат обработки ИИ
           message.message = processedMessage.message || message.message
 
-          // Теперь отправляем медиа с обработанным текстом
           await downloadAndSendMedia(myGroup, message, ctx)
-          return // Медиа обработано и отправлено, выходим
+          return
         }
 
         // Если сообщение содержит только текст, обрабатываем через ИИ
