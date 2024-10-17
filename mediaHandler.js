@@ -186,12 +186,25 @@ async function sendMedia(
           mediaOptions
         )
         break
-      default:
+      case 'audio':
+        await bot.telegram.sendAudio(
+          chatId,
+          { source: mediaPath },
+          mediaOptions
+        )
+        break
+      case 'document':
         await bot.telegram.sendDocument(
           chatId,
           { source: mediaPath },
           mediaOptions
         )
+        break
+      case 'sticker':
+        await bot.telegram.sendSticker(chatId, { source: mediaPath })
+        break
+      default:
+        logWithTimestamp(`Неизвестный тип медиа: ${mediaType}`, 'error')
     }
   } catch (error) {
     logWithTimestamp(`Ошибка при отправке медиа: ${error.message}`, 'error')
@@ -251,6 +264,7 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
     return
   }
 
+  // Определение типа медиа
   let mediaType = 'document'
   if (media.photo) {
     mediaType = 'photo'
@@ -261,6 +275,12 @@ export async function downloadAndSendMedia(chatId, message, ctx) {
   } else if (media.video) {
     mediaType = 'video'
     logWithTimestamp('Тип медиа: видео.', 'info')
+  } else if (media.audio) {
+    mediaType = 'audio'
+    logWithTimestamp('Тип медиа: аудио.', 'info')
+  } else if (media.sticker) {
+    mediaType = 'sticker'
+    logWithTimestamp('Тип медиа: стикер.', 'info')
   }
 
   let convertedVideoPath = null
