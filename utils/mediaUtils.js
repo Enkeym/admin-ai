@@ -1,8 +1,15 @@
-// Функция для определения расширения медиа
 export function getMediaFileExtension(media) {
-  if (media.photo) return 'jpg'
-  if (media.video) return 'mp4'
-  if (media.audio) return 'mp3'
+  if (media.video) {
+    return 'mp4'
+  }
+
+  if (media.photo) {
+    return 'jpg'
+  }
+
+  if (media.audio) {
+    return 'mp3'
+  }
 
   if (media.document && media.document.mimeType) {
     const mimeType = media.document.mimeType
