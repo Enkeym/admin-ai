@@ -445,14 +445,9 @@ export async function watchNewMessages(channelIds, ctx) {
       }
     }
 
-    client.addEventHandler(
-      handler,
-      new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    )
-    currentHandlers.push({
-      handler,
-      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    })
+    const event = new NewMessage({ chats: [parseInt(channelId) || channelId] })
+    client.addEventHandler(handler, event)
+    currentHandlers.push({ handler, event })
   }
 
   if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями.')
@@ -542,14 +537,9 @@ export async function watchNewMessagesAi(channelIds, ctx) {
       }
     }
 
-    client.addEventHandler(
-      handler,
-      new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    )
-    currentHandlers.push({
-      handler,
-      event: new NewMessage({ chats: [parseInt(channelId) || channelId] })
-    })
+    const event = new NewMessage({ chats: [parseInt(channelId) || channelId] })
+    client.addEventHandler(handler, event)
+    currentHandlers.push({ handler, event })
   }
 
   if (ctx) ctx.reply('Начато наблюдение за новыми сообщениями с обработкой ИИ.')
